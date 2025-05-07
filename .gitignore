@@ -1,0 +1,54 @@
+# Webots temporary & build files
+*.wbo
+*.log
+*.bak
+*.tmp
+*.pyc
+*.class
+*.o
+*.so
+*.dll
+*.out
+
+# Cache folders
+cache/
+build/
+bin/
+lib/
+logs/
+output/
+
+# Controllers compiled artifacts
+controllers/*/*.exe
+controllers/*/*.class
+controllers/*/*.out
+controllers/*/CMakeFiles/
+controllers/*/Makefile
+controllers/*/cmake_install.cmake
+controllers/*/CMakeCache.txt
+controllers/*/build/
+
+# Python virtual env
+venv/
+.env/
+__pycache__/
+
+# Webots backup and autosave
+*.wbt~  
+*.wbt.bak  
+*.wbo~
+*.wbo.bak
+
+# Editor/IDE specific
+.vscode/
+.idea/
+*.swp
+*~
+
+# ROS 2 workspace (如果你使用 Webots + ROS2)
+install/
+log/
+build/
+ros2_ws/install/
+ros2_ws/log/
+ros2_ws/build/
