@@ -18,8 +18,9 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/MattePaint.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/garden/protos/WateringCan.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/stairs/protos/StraightStairs.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/robotis/turtlebot/protos/TurtleBot3Burger.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/devices/robotis/protos/RobotisLds01.proto"
+EXTERNPROTO "/home/jerry/Documents/webots/tongji_webot_project/protos/TurtleBot3Burger.proto"
+EXTERNPROTO "/home/jerry/Documents/webots/tongji_webot_project/protos/RobotisLds01.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/devices/velodyne/protos/VelodyneHDL-64E.proto"
 
 WorldInfo {
   info [
@@ -30,8 +31,8 @@ WorldInfo {
   title "Office Floor"
 }
 Viewpoint {
-  orientation 0.019756842884128913 -0.999448967997529 0.02667259882212587 4.72914896266468
-  position -3.5887608170711127 16.476713869582056 39.8419507933328
+  orientation 0.1784098579749798 -0.9333763137511666 0.3114138396180095 6.150628528862998
+  position -7.960681248254588 18.156519016453416 0.45489973692862135
 }
 TexturedBackground {
   texture "entrance_hall"
@@ -1021,6 +1022,9 @@ TurtleBot3Burger {
     ""
   ]
   extensionSlot [
+    VelodyneHDL-64E {
+      translation 0 0 0.23
+    }
     Solid {
       name "imu_link"
     }
