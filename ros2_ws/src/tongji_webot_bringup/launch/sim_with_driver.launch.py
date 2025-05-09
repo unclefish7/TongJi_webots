@@ -49,55 +49,55 @@ def generate_launch_description():
     )
 
     # 添加map到odom的变换关系，确保SLAM可以正确建立坐标系
-    map_to_odom_publisher = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        output='screen',
-        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
-    )
+    # map_to_odom_publisher = Node(
+    #     package='tf2_ros',
+    #     executable='static_transform_publisher',
+    #     output='screen',
+    #     arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
+    # )
 
-    slam_node = Node(
-        package='slam_toolbox',
-        executable='sync_slam_toolbox_node',
-        name='slam_toolbox',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'resolution': 0.05,
-            'max_laser_range': 20.0,
-            'map_update_interval': 5.0,
-            'enable_interactive_mode': False,
-            'scan_topic': '/scan',  # 明确指定使用/scan话题
-            'minimum_travel_distance': 0.5,
-            'minimum_travel_heading': 0.5,
-            'loop_search_maximum_distance': 3.0,
-            'map_file_name': '',
-            'mode': 'mapping',
-        }],
-    )
+    # slam_node = Node(
+    #     package='slam_toolbox',
+    #     executable='sync_slam_toolbox_node',
+    #     name='slam_toolbox',
+    #     output='screen',
+    #     parameters=[{
+    #         'use_sim_time': use_sim_time,
+    #         'resolution': 0.05,
+    #         'max_laser_range': 20.0,
+    #         'map_update_interval': 5.0,
+    #         'enable_interactive_mode': False,
+    #         'scan_topic': '/scan',  # 明确指定使用/scan话题
+    #         'minimum_travel_distance': 0.5,
+    #         'minimum_travel_heading': 0.5,
+    #         'loop_search_maximum_distance': 3.0,
+    #         'map_file_name': '',
+    #         'mode': 'mapping',
+    #     }],
+    # )
 
-    pointcloud_to_laserscan_node = Node(
-        package='pointcloud_to_laserscan',
-        executable='pointcloud_to_laserscan_node',
-        name='pointcloud_to_laserscan',
-        output='screen',
-        parameters=[{
-            'target_frame': 'base_link',
-            'transform_tolerance': 0.01,
-            'min_height': -0.1,
-            'max_height': 0.1,
-            'angle_min': -3.14,
-            'angle_max': 3.14,
-            'angle_increment': 0.01,
-            'scan_time': 0.1,
-            'range_min': 0.1,
-            'range_max': 30.0,
-        }],
-        remappings=[
-            ('/cloud_in', '/velodyne_points'),
-            ('/scan', '/scan'),
-        ]
-    )
+    # pointcloud_to_laserscan_node = Node(
+    #     package='pointcloud_to_laserscan',
+    #     executable='pointcloud_to_laserscan_node',
+    #     name='pointcloud_to_laserscan',
+    #     output='screen',
+    #     parameters=[{
+    #         'target_frame': 'base_link',
+    #         'transform_tolerance': 0.01,
+    #         'min_height': -0.1,
+    #         'max_height': 0.1,
+    #         'angle_min': -3.14,
+    #         'angle_max': 3.14,
+    #         'angle_increment': 0.01,
+    #         'scan_time': 0.1,
+    #         'range_min': 0.1,
+    #         'range_max': 30.0,
+    #     }],
+    #     remappings=[
+    #         ('/cloud_in', '/velodyne_points'),
+    #         ('/scan', '/scan'),
+    #     ]
+    # )
 
     velodyne_tf_publisher = Node(
         package='tf2_ros',
@@ -188,9 +188,9 @@ def generate_launch_description():
         turtlebot_driver,
         waiting_nodes,
 
-        pointcloud_to_laserscan_node,
-        slam_node,
-        map_to_odom_publisher,
+        # pointcloud_to_laserscan_node,
+        # slam_node,
+        # map_to_odom_publisher,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
