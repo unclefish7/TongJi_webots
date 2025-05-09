@@ -19,13 +19,10 @@
 import os
 from launch.substitutions import LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions.path_join_substitution import PathJoinSubstitution
 from launch import LaunchDescription
 from launch_ros.actions import Node
 import launch
-from ament_index_python.packages import get_package_share_directory, get_packages_with_prefixes
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.actions import IncludeLaunchDescription
+from ament_index_python.packages import get_package_share_directory
 from webots_ros2_driver.webots_launcher import WebotsLauncher
 from webots_ros2_driver.webots_controller import WebotsController
 from webots_ros2_driver.wait_for_controller_connection import WaitForControllerConnection
@@ -35,14 +32,27 @@ def generate_launch_description():
     package_dir = get_package_share_directory('tongji_webot_bringup')
     world = LaunchConfiguration('world')
     mode = LaunchConfiguration('mode')
-    use_nav = LaunchConfiguration('nav', default=False)
-    use_slam = LaunchConfiguration('slam', default=False)
     use_sim_time = LaunchConfiguration('use_sim_time', default=True)
 
     webots = WebotsLauncher(
         world=os.path.join(package_dir, 'worlds', 'office_simple.wbt'),
         mode=mode,
         ros2_supervisor=True
+    )
+
+    keyboard_teleop_node = Node(
+        package='teleop_twist_keyboard',
+        executable='teleop_twist_keyboard',
+        name='keyboard_teleop',
+        output='screen',
+        prefix='xterm -e',  # 打开独立终端窗口（可选）
+    )
+
+    velodyne_tf_publisher = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '0.25', '0', '0', '0', 'base_link', 'velodyne_link']
     )
 
     robot_state_publisher = Node(
@@ -99,38 +109,10 @@ def generate_launch_description():
         respawn=True
     )
 
-    # Navigation
-    navigation_nodes = []
-    os.environ['TURTLEBOT3_MODEL'] = 'burger'
-    nav2_map = os.path.join(package_dir, 'resource', 'turtlebot3_burger_example_map.yaml')
-    nav2_params = os.path.join(package_dir, 'resource', 'nav2_params.yaml')
-    if 'turtlebot3_navigation2' in get_packages_with_prefixes():
-        turtlebot_navigation = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(
-                get_package_share_directory('turtlebot3_navigation2'), 'launch', 'navigation2.launch.py')),
-            launch_arguments=[
-                ('map', nav2_map),
-                ('params_file', nav2_params),
-                ('use_sim_time', use_sim_time),
-            ],
-            condition=launch.conditions.IfCondition(use_nav))
-        navigation_nodes.append(turtlebot_navigation)
-
-    # SLAM
-    if 'turtlebot3_cartographer' in get_packages_with_prefixes():
-        turtlebot_slam = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(
-                get_package_share_directory('turtlebot3_cartographer'), 'launch', 'cartographer.launch.py')),
-            launch_arguments=[
-                ('use_sim_time', use_sim_time),
-            ],
-            condition=launch.conditions.IfCondition(use_slam))
-        navigation_nodes.append(turtlebot_slam)
-
-    # Wait for the simulation to be ready to start navigation nodes
+    # 等待驱动节点连接后再启动 ros2_control 控制器
     waiting_nodes = WaitForControllerConnection(
         target_driver=turtlebot_driver,
-        nodes_to_start=navigation_nodes + ros_control_spawners
+        nodes_to_start=ros_control_spawners
     )
 
     return LaunchDescription([
@@ -149,7 +131,9 @@ def generate_launch_description():
 
         robot_state_publisher,
         footprint_publisher,
-
+        velodyne_tf_publisher,
+        keyboard_teleop_node,
+        
         turtlebot_driver,
         waiting_nodes,
 

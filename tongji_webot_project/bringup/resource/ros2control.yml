@@ -31,3 +31,16 @@ joint_state_broadcaster:
     extra_joints:
       - LDS-01_secondary_motor
       - LDS-01_main_motor
+      - base_link_compass_joint
+      - base_link_gyro_joint
+      - base_link_accelerometer_joint
+      - base_link_LDS-01_joint
+      - LDS-01_screw3_joint
+      - LDS-01_screw2_joint
+      - LDS-01_screw1_joint
+      - LDS-01_screw0_joint
+      - base_link_inertial_unit_joint
+      - base_link_gps_joint
+      - base_link_imu_link_joint
+      - base_link_Velodyne HDL-64E_joint
+      - Velodyne HDL-64E_solid_0_joint

@@ -1,6 +1,14 @@
 <?xml version="1.0" ?>
 <robot name="TurtleBot3 Burger Webots">
     <webots>
+        <device reference="Velodyne HDL-64E" type="Lidar">
+            <ros>
+            <enabled>true</enabled>
+            <updateRate>10</updateRate>
+            <topicName>/velodyne_points</topicName>
+            <frameName>velodyne_link</frameName>
+            </ros>
+        </device>
         <device reference="LDS-01" type="Lidar">
             <ros>
                 <enabled>true</enabled>
