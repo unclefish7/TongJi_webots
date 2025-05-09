@@ -118,7 +118,7 @@ PROTO VelodyneHDL-64E [
     fieldOfView 6.283185
     verticalFieldOfView 1.0
     numberOfLayers 64
-    minRange 0.1
+    minRange 0
     maxRange 12
     projection "cylindrical"
     type "rotating"

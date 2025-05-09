@@ -49,4 +49,3 @@ __pycache__/
 install/
 log/
 build/
-ros2_ws
