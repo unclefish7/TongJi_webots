@@ -8,4 +8,10 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  DIRECTORY scripts/
+  DESTINATION lib/${PROJECT_NAME}
+  USE_SOURCE_PERMISSIONS
+)
+
 ament_package()
