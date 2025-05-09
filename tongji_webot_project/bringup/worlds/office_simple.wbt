@@ -31,8 +31,8 @@ WorldInfo {
   title "Office Floor"
 }
 Viewpoint {
-  orientation 0.056160927256563714 -0.9983587367184723 -0.011215305059552459 4.969491745751928
-  position -5.955740419224137 17.421596134316346 26.983408052167327
+  orientation 0.18581587216686885 0.8284247598006218 -0.5283794838940546 1.0041072304039043
+  position -25.287071257596814 26.575156439160313 34.44392164441806
 }
 TexturedBackground {
   texture "entrance_hall"
@@ -53,6 +53,16 @@ Floor {
       scale 0.4 0.4
     }
   }
+}
+Wall {
+  translation 0 -12.41 -0.03
+  name "wall(13)"
+  size 20 0.2 4
+}
+Wall {
+  translation 0 27.35 -0.03
+  name "wall(14)"
+  size 20 0.2 4
 }
 OfficeChair {
   hidden position_0_0 0.6995549031512941
@@ -223,10 +233,10 @@ CeilingLight {
   pointLightCastShadows TRUE
 }
 Wall {
-  translation 4.63 -10.04 1.85
+  translation 4.63 -9.98 1.85
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right"
-  size 3.5 5 0.06
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.3 0.5
     textureTransform TextureTransform {
@@ -235,10 +245,10 @@ Wall {
   }
 }
 Wall {
-  translation 2.13 -10.04 1.85
+  translation 2.13 -9.98 1.85
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(7)"
-  size 3.5 5 0.06
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.5 0.5 0.5
     textureTransform TextureTransform {
@@ -250,7 +260,7 @@ Wall {
   translation -2.8 -9.9 0.78
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(5)"
-  size 3.5 5 0.06
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.5 0.5 0.5
     textureTransform TextureTransform {
@@ -259,10 +269,10 @@ Wall {
   }
 }
 Wall {
-  translation 4.63 8.96 1.85
+  translation 4.99 8.96 1.85
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(3)"
-  size 3.5 7 0.06
+  size 3.5 7 0.25
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.6 0.3 1
     textureTransform TextureTransform {
@@ -271,7 +281,7 @@ Wall {
   }
 }
 Wall {
-  translation -2.62709 24.6767 -0.36
+  translation -2.17709 24.6767 -0.36
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(11)"
   size 3.5 5 0.06
@@ -283,7 +293,7 @@ Wall {
   }
 }
 Wall {
-  translation -0.654585 17.9114 -0.36
+  translation 0.005415 17.9114 -0.36
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(12)"
   size 3.5 5 0.06
@@ -295,7 +305,7 @@ Wall {
   }
 }
 Wall {
-  translation -0.693802 24.7259 -0.36
+  translation -0.083802 24.7259 -0.36
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(13)"
   size 3.5 5 0.06
@@ -307,7 +317,7 @@ Wall {
   }
 }
 Wall {
-  translation -2.64248 17.8998 -0.36
+  translation -2.14248 17.8998 -0.36
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(14)"
   size 3.5 5 0.06
@@ -319,10 +329,10 @@ Wall {
   }
 }
 Wall {
-  translation 4.63 -1.79 1.85
+  translation 4.99 -1.79 1.85
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(6)"
-  size 3.5 7 0.06
+  size 3.5 7 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.3 0.803922 1
     textureTransform TextureTransform {
@@ -331,10 +341,10 @@ Wall {
   }
 }
 Wall {
-  translation 7.08 -3.93 1.85
+  translation 7.48 -3.93 1.85
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(1)"
-  size 3.5 5 0.06
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.3 0.803922 1
     textureTransform TextureTransform {
@@ -343,10 +353,10 @@ Wall {
   }
 }
 Wall {
-  translation 7.08 3.57 1.85
+  translation 7.52 3.57 1.85
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(2)"
-  size 3.5 5 0.06
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.6 0.3 1
     textureTransform TextureTransform {
@@ -355,10 +365,10 @@ Wall {
   }
 }
 Wall {
-  translation 7.08 12.48 1.85
+  translation 7.48 12.48 1.85
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(4)"
-  size 3.5 5 0.06
+  size 3.5 5 0.3
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.6 0.3 1
     textureTransform TextureTransform {
@@ -379,7 +389,7 @@ Wall {
   }
 }
 Wall {
-  translation -7.0217 14.2972 -0.169964
+  translation -6.4417 14.2972 -0.169964
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(9)"
   size 3.5 5 0.06
@@ -393,7 +403,7 @@ Wall {
 Wall {
   translation 2.01 -0.43 1.2
   rotation -0.5773509358554485 0.5773489358556708 0.5773509358554485 -2.094395307179586
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.803922 1
     textureTransform TextureTransform {
@@ -405,7 +415,7 @@ Wall {
   translation 2.01 8.64 1.20001
   rotation -0.5773509358554485 0.5773489358556708 0.5773509358554485 -2.094395307179586
   name "wall(11)"
-  size 6 5 0.06
+  size 6 5 0.3
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.803922 1
     textureTransform TextureTransform {
@@ -414,10 +424,10 @@ Wall {
   }
 }
 Wall {
-  translation -2.03 3.6 1.2
+  translation -1.76 3.6 1.2
   rotation -0.5773509358554485 0.5773489358556708 0.5773509358554485 -2.094395307179586
   name "wall(5)"
-  size 4 2.5 0.06
+  size 4 2.5 0.3
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.803922 1
     textureTransform TextureTransform {
@@ -426,10 +436,10 @@ Wall {
   }
 }
 Wall {
-  translation -6.01 5.45 1.2
+  translation -5.96 5.45 1.2
   rotation -0.5773509358554485 0.5773489358556708 0.5773509358554485 -2.094395307179586
   name "wall(10)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0 0 0
     textureTransform TextureTransform {
@@ -441,7 +451,7 @@ Wall {
   translation -0.050002 -2.41 1.23
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(1)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.803922 1
     textureTransform TextureTransform {
@@ -453,7 +463,7 @@ Wall {
   translation -0.780002 -7.36 1.26
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(6)"
-  size 4 2.5 0.06
+  size 4 2.5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.5 0.5 0.5
     textureTransform TextureTransform {
@@ -465,7 +475,7 @@ Wall {
   translation -0.050002 1.59 1.23
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(2)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.803922 1
     textureTransform TextureTransform {
@@ -477,7 +487,7 @@ Wall {
   translation -7.98 5.48 1.23
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(8)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0 0 0
     textureTransform TextureTransform {
@@ -489,7 +499,7 @@ Wall {
   translation -7.98 8.8 1.23
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(9)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0 0 0
     textureTransform TextureTransform {
@@ -501,7 +511,7 @@ Wall {
   translation -7.99 2.23 1.23
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(4)"
-  size 4 2.5 0.06
+  size 4 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0 0 0
     textureTransform TextureTransform {
@@ -531,7 +541,7 @@ Table {
   }
 }
 Table {
-  translation 7.58564 16.7017 0.52
+  translation 7.58564 16.3017 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(2)"
   size 1.6 0.74 1
@@ -541,7 +551,7 @@ Table {
   }
 }
 Table {
-  translation 4.34101 20.0491 0.52
+  translation 5.24101 19.3891 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(8)"
   size 1.6 0.74 1
@@ -551,7 +561,7 @@ Table {
   }
 }
 Table {
-  translation 4.37315 26.2866 0.52
+  translation 5.30315 25.7666 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(15)"
   size 1.6 0.74 1
@@ -561,7 +571,7 @@ Table {
   }
 }
 Table {
-  translation 4.35267 23.2059 0.52
+  translation 5.20267 22.3359 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(14)"
   size 1.6 0.74 1
@@ -571,7 +581,7 @@ Table {
   }
 }
 Table {
-  translation 7.61346 20.1327 0.52
+  translation 7.61346 19.4427 0.52
   rotation 0 0 0.9999999999999999 1.5707953071795862
   name "table(7)"
   size 1.6 0.74 1
@@ -581,7 +591,7 @@ Table {
   }
 }
 Table {
-  translation 7.64 23.25 0.52
+  translation 7.64 22.47 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(12)"
   size 1.6 0.74 1
@@ -591,7 +601,7 @@ Table {
   }
 }
 Table {
-  translation 7.6 26.28 0.52
+  translation 7.6 25.82 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(13)"
   size 1.6 0.74 1
@@ -621,7 +631,7 @@ Table {
   }
 }
 Table {
-  translation 4.28893 16.667 0.52
+  translation 5.14893 16.207 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(3)"
   size 1.6 0.74 1
@@ -631,7 +641,7 @@ Table {
   }
 }
 Table {
-  translation 1.31062 16.6494 0.52
+  translation 2.26062 16.3094 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(4)"
   size 1.6 0.74 1
@@ -641,7 +651,7 @@ Table {
   }
 }
 Table {
-  translation 1.33098 20.0464 0.52
+  translation 2.32098 19.2864 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(9)"
   size 1.6 0.74 1
@@ -651,7 +661,7 @@ Table {
   }
 }
 Table {
-  translation 1.41323 26.2465 0.52
+  translation 2.21323 25.6865 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(17)"
   size 1.6 0.74 1
@@ -661,7 +671,7 @@ Table {
   }
 }
 Table {
-  translation 1.37515 23.1961 0.52
+  translation 2.25515 22.3361 0.52
   rotation 0 0 -1 -1.5707953071795862
   name "table(16)"
   size 1.6 0.74 1
@@ -737,7 +747,7 @@ OfficeChair {
   rotation -0.019620198325449326 -0.9985908018182212 0.049309819931855 0.0014071051357104163
 }
 Table {
-  translation 7 8.1 0
+  translation 7.35 8.1 0
   rotation 0 0 1 1.5708
   name "table(1)"
   size 4 2 1.5
@@ -769,41 +779,41 @@ Table {
 OfficeChair {
   hidden position_0_0 0.01659528294193425
   hidden rotation_1 0 0 1 0.016595282941941084
-  translation 8.685859711321763 6.359751036810538 -0.0014151414446962052
+  translation 9.67425 6.30315 -0.00142693
   rotation 0.0007088105838798006 -0.000737918097866824 0.9999994765320817 1.5135936720723886
 }
 OfficeChair {
   hidden position_0_0 0.01657960709973306
   hidden rotation_1 0 0 1 0.016579607099737995
-  translation 8.678640047045473 7.98321101907824 -0.001415141426424904
+  translation 9.30762 7.94719 -0.00142263
   rotation 0.0007087997301634299 -0.0007379314662636545 0.9999994765299097 1.5135900324784803
   name "office chair(1)"
 }
 OfficeChair {
   hidden position_0_0 0.016574571961537783
   hidden rotation_1 0 0 1 0.016574571961547276
-  translation 5.236400047070908 6.818131019096365 -0.001415141420555932
+  translation 5.76552 6.78783 -0.00142145
   rotation 0.0007087962364825308 -0.0007379348890882506 0.9999994765298603 1.5135900325559066
   name "office chair(2)"
 }
 OfficeChair {
   hidden position_0_0 0.017313373438865083
   hidden rotation_1 0 0 1 0.017313373438875644
-  translation 8.591849931243608 9.44057916881544 -0.0014151422809729752
+  translation 8.99121 9.41771 -0.00140999
   rotation -0.0006964085741061756 -0.0006698488534267031 -0.9999995331586967 1.6280043264185466
   name "office chair(3)"
 }
 OfficeChair {
   hidden position_0_0 0.017926533407952368
   hidden rotation_1 0 0 1 0.0179265334079626
-  translation 5.048629954396984 8.261278986152286 -0.0014151429939507354
+  translation 5.6177 8.2287 -0.00140735
   rotation -0.00069601451067753 -0.000670249580665435 -0.9999995331645415 1.6280052755034422
   name "office chair(4)"
 }
 OfficeChair {
   hidden position_0_0 0.00956031487054055
   hidden rotation_1 0 0 1 0.009560314870544496
-  translation 5.333804916574602 9.961173966679038 -0.001415133178565564
+  translation 5.54378 9.95809 -0.0014146
   rotation -0.0007013172217718239 -0.0006936105743989033 -0.9999995135291444 1.585459691607819
   name "office chair(5)"
 }
@@ -838,35 +848,35 @@ OfficeChair {
 OfficeChair {
   hidden position_0_0 0.37232204046925793
   hidden rotation_1 0 0 0.9999999999999999 0.3723220404692582
-  translation 5.58667 26.5385 -0.00141538
+  translation 6.34621 26.5648 -0.00241138
   rotation 0.0006511196039588892 0.00024895364372781373 0.9999997570326429 -3.106808705880405
   name "office chair(10)"
 }
 OfficeChair {
   hidden position_0_0 0.45760108587390064
   hidden rotation_1 0 0 1 0.4576010858739004
-  translation 5.60205 23.2635 -0.00141538
+  translation 6.18162 23.2859 -0.00214802
   rotation 0.0006260034927071586 0.0003017902417804265 0.9999997585211093 -3.103042209780291
   name "office chair(12)"
 }
 OfficeChair {
   hidden position_0_0 0.603888055639827
   hidden rotation_1 0 0 1 0.6038880556398271
-  translation 5.52885 20.1706 -0.00141534
+  translation 6.03632 20.1198 -0.00200765
   rotation 0.0005992976179083524 0.00034481891431046403 0.9999997609711121 3.0420736164090956
   name "office chair(13)"
 }
 OfficeChair {
   hidden position_0_0 0.5184566109401667
   hidden rotation_1 0 0 1 0.518456610940167
-  translation 5.46192 16.6567 -0.00141537
+  translation 6.02189 16.6503 -0.00210076
   rotation 0.0006138133851933518 0.00032198041667366945 0.999999759780841 3.1301581845243067
   name "office chair(14)"
 }
 OfficeChair {
   hidden position_0_0 0.6114746238785549
   hidden rotation_1 0 0 1 0.6114746238785548
-  translation 2.36654 26.5383 -0.00141533
+  translation 3.47654 26.5381 -0.00269784
   rotation 0.0005777530641810796 0.0003778225693009562 0.999999761725723 3.141343306930852
   name "office chair(11)"
 }
@@ -908,21 +918,21 @@ OfficeChair {
 OfficeChair {
   hidden position_0_0 0.48987101970074287
   hidden rotation_1 0 0 1 0.4898710197007428
-  translation 2.37432 23.3399 -0.00141538
+  translation 3.59394 23.3097 -0.00293172
   rotation 0.0006252755608199024 0.0003010864340103929 0.9999997591886873 3.1168447648015567
   name "office chair(15)"
 }
 OfficeChair {
   hidden position_0_0 0.3860166765901906
   hidden rotation_1 0 0 1 0.38601667659019084
-  translation 2.32312 20.0635 -0.00141538
+  translation 3.45965 20.2389 -0.00291444
   rotation 0.0006328796259550356 0.00029605884055938043 0.9999997559062411 -2.98841901414555
   name "office chair(16)"
 }
 OfficeChair {
   hidden position_0_0 0.5329125885772424
   hidden rotation_1 0 0 1 0.532912588577242
-  translation 2.31266 16.5915 -0.00141537
+  translation 3.30981 16.5159 -0.0026293
   rotation 0.0006195758418583013 0.00031088825112073596 0.9999997597371069 3.066053112478347
   name "office chair(17)"
 }
@@ -1036,4 +1046,14 @@ TurtleBot3Burger {
     RobotisLds01 {
     }
   ]
+}
+Wall {
+  translation 10.08 7.47 0
+  name "wall(7)"
+  size 0.2 40 4
+}
+Wall {
+  translation -9.93 7.47 0
+  name "wall(12)"
+  size 0.2 40 4
 }
