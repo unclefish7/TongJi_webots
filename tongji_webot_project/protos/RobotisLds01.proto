@@ -194,7 +194,7 @@ PROTO RobotisLds01 [
     numberOfLayers 1
     near 0.01
     minRange 0.01
-    maxRange 10
+    maxRange 30
     noise IS noise
   }
 }

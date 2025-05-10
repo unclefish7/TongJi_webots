@@ -31,8 +31,10 @@ WorldInfo {
   title "Office Floor"
 }
 Viewpoint {
-  orientation 0.24020847421355312 0.7659104304551173 -0.5963900581297894 1.1342425059644354
-  position -9.964677950927518 22.116705009110152 7.373912239233325
+  orientation -0.049131978583799446 0.9987872753829666 0.003166577570708114 1.4409652242786766
+  position -8.96277970830496 21.852061405512792 13.821402893760602
+  follow "TurtleBot3Burger"
+  followType "Mounted Shot"
 }
 TexturedBackground {
   texture "entrance_hall"
@@ -86,7 +88,7 @@ OfficeChair {
   name "office chair(24)"
 }
 WateringCan {
-  translation 0 3.4 0
+  translation 17.91 3.4 0
 }
 CeilingLight {
   translation 6 6 3.54
@@ -377,7 +379,7 @@ Wall {
   }
 }
 Wall {
-  translation 4.70805 14.2829 -0.170003
+  translation 6.098 14.2829 -0.170008
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(8)"
   size 3.5 8 0.06
@@ -389,7 +391,7 @@ Wall {
   }
 }
 Wall {
-  translation -6.4417 14.2972 -0.169964
+  translation -7.5217 14.2972 -0.169961
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(9)"
   size 3.5 5 0.06
@@ -460,7 +462,7 @@ Wall {
   }
 }
 Wall {
-  translation -0.780002 -7.36 1.26
+  translation -1.16 -7.36 1.26
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(6)"
   size 4 2.5 0.4
@@ -980,12 +982,12 @@ Sofa {
   name "sofa(3)"
 }
 Sofa {
-  translation 0.510101 10.24 0
+  translation 1.2101 10.08 0
   rotation 0 0 1 3.14159
   name "sofa(5)"
 }
 Sofa {
-  translation 0.510097 8.17 0
+  translation 1.2101 8.27001 0
   rotation 0 0 1 3.14159
   name "sofa(6)"
 }
@@ -1026,7 +1028,7 @@ StraightStairs {
   name "straight stairs(1)"
 }
 TurtleBot3Burger {
-  translation -6.21358 18.1448 1.77635e-15
+  translation -8.92358 21.3748 1.77635e-15
   controller "<extern>"
   controllerArgs [
     ""
