@@ -1,39 +1,58 @@
 slam_toolbox:
   ros__parameters:
     use_sim_time: true
+    mode: mapping
 
-    # 地图参数
-    resolution: 0.05
-    map_update_interval: 1.0
+    scan_topic: /scan
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    transform_publish_period: 0.02   # 更频繁发布TF（默认0.05）
+    map_update_interval: 1.0         # 更频繁更新地图（默认3.0）
 
-    # 激光滤波与频率
-    max_laser_range: 8.0
-    minimum_time_interval: 0.1
+    use_imu: true
 
-    # 位姿估计
-    transform_publish_period: 0.05
-    publish_map_period: 1.0
-    use_scan_matching: true
-    scan_matcher_translation_weight: 20.0
-    scan_matcher_rotation_weight: 10.0
-
-    # 后端图优化
-    use_pose_graph: true
-    pose_graph_optimizer: g2o
-    minimum_travel_distance: 0.2
-    minimum_travel_heading: 0.174
-    optimization_interval: 10.0
-
-    # 启用回环闭环检测
-    use_loop_closing: true
-    loop_match_min_chain_size: 10
-    loop_match_max_variance: 1.0
-    loop_search_max_distance: 3.0
-
-    # 优化器设置
+    # 插件 & 优化器
     solver_plugin: solver_plugins::CeresSolver
-    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
-    ceres_preconditioner: SCHUR_JACOBI
-    ceres_dogleg_type: TRADITIONAL_DOGLEG
-    ceres_trust_strategy: LEVENBERG_MARQUARDT
-    ceres_max_num_iterations: 200
+    ceres_linear_solver: SPARSE_SCHUR
+    ceres_preconditioner: JACOBI
+    ceres_trust_strategy: DOGLEG
+    ceres_dogleg_type: SUBSPACE_DOGLEG
+    ceres_loss_function: HuberLoss
+    ceres_max_num_iterations: 250    # 默认200，可拉高
+
+    # 建图参数
+    resolution: 0.03                 # 更高分辨率地图（越小越细）
+    minimum_travel_distance: 0.1     # 更频繁触发位姿更新
+    minimum_travel_heading: 0.1
+    use_scan_matching: true
+    scan_buffer_size: 30             # 使用更多历史scan做匹配
+    scan_buffer_maximum_scan_distance: 20.0
+
+    # 优化器相关
+    do_loop_closing: true
+    link_scan_maximum_distance: 2.0
+    loop_search_maximum_distance: 5.0
+    loop_match_minimum_response_fine: 0.45
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_chain_size: 8
+
+    # 相关性匹配（越细越准）
+    correlation_search_space_dimension: 0.8
+    correlation_search_space_resolution: 0.005
+    correlation_search_space_smear_deviation: 0.05
+
+    # 匹配误差容忍度
+    distance_variance_penalty: 0.3
+    angle_variance_penalty: 0.5
+    fine_search_angle_offset: 0.00175   # 更精细角度搜索
+    coarse_search_angle_offset: 0.174
+    coarse_angle_resolution: 0.0174
+
+    minimum_angle_penalty: 0.8
+    minimum_distance_penalty: 0.4
+    use_response_expansion: true
+    occupancy_threshold: 0.05          # 让占据率更灵敏（默认0.1）
+
+    enable_interactive_mode: false     # 你手动控制建图，不必使用交互模式

@@ -21,6 +21,9 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>ros2cli</exec_depend>
+  <build_depend>rosgraph_msgs</build_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>python3-pytest</test_depend>

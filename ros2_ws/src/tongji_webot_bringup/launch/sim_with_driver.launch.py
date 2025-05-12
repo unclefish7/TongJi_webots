@@ -188,6 +188,13 @@ def generate_launch_description():
         turtlebot_driver,
         waiting_nodes,
 
+        # Node(
+        #     package='tongji_webot_bringup',
+        #     executable='clock_publisher',
+        #     name='sim_clock_publisher',
+        #     output='screen'
+        # ),
+
         # pointcloud_to_laserscan_node,
         # slam_node,
         # map_to_odom_publisher,

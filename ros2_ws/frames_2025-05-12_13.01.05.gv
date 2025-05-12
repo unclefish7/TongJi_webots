@@ -1,0 +1,26 @@
+digraph G {
+"odom" -> "base_link"[label=" Broadcaster: Authority undetectable\nAverage rate: 31.35\nBuffer length: 10.016\nMost recent transform: 1481.984\nOldest transform: 1471.968\n"];
+"base_link" -> "velodyne_link"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "base_footprint"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"LDS-01" -> "lower"[label=" Broadcaster: Authority undetectable\nAverage rate: 15.725\nBuffer length: 10.048\nMost recent transform: 1481.984\nOldest transform: 1471.936\n"];
+"base_link" -> "LDS-01"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"LDS-01" -> "solid"[label=" Broadcaster: Authority undetectable\nAverage rate: 15.725\nBuffer length: 10.048\nMost recent transform: 1481.984\nOldest transform: 1471.936\n"];
+"base_link" -> "left wheel"[label=" Broadcaster: Authority undetectable\nAverage rate: 15.725\nBuffer length: 10.048\nMost recent transform: 1481.984\nOldest transform: 1471.936\n"];
+"base_link" -> "right wheel"[label=" Broadcaster: Authority undetectable\nAverage rate: 15.725\nBuffer length: 10.048\nMost recent transform: 1481.984\nOldest transform: 1471.936\n"];
+"LDS-01" -> "screw0"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"LDS-01" -> "screw1"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"LDS-01" -> "screw2"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"LDS-01" -> "screw3"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"Velodyne HDL-64E" -> "solid_0"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "Velodyne HDL-64E"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "accelerometer"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "compass"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "gps"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "gyro"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "imu_link"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"base_link" -> "inertial_unit"[label=" Broadcaster: Authority undetectable\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1747026065.9160352"[ shape=plaintext ] ;
+}->"odom";
+}

@@ -8,9 +8,16 @@ ros2 launch tongji_webot_bringup sim_with_driver.launch.py
 
 # 静态建图相关
 ros2 launch auto_explorer auto_explorer.launch.py
+ros2 launch auto_explorer cartographer.launch.py
 
 # 保存地图
 ros2 run nav2_map_server map_saver_cli -f my_office_map
+
+# clear map
+ros2 service call /slam_toolbox/clear --std_srvs/srv/Empty
+
+# save map
+ros2 run nav2_map_server map_saver_cli -f /home/jerry/Documents/webots/ros2_ws/src/auto_explorer/map/my_office_map
 
 
 

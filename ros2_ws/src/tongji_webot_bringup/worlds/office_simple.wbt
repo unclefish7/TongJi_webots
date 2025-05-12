@@ -2,7 +2,6 @@
 
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/apartment_structure/protos/Wall.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/lights/protos/CeilingLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/tables/protos/Table.proto"
@@ -12,7 +11,6 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/computers/protos/Monitor.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/computers/protos/Keyboard.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/computers/protos/ComputerMouse.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Parquetry.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Roughcast.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/VarnishedPine.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/MattePaint.proto"
@@ -21,6 +19,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "/home/jerry/Documents/webots/tongji_webot_project/protos/TurtleBot3Burger.proto"
 EXTERNPROTO "/home/jerry/Documents/webots/tongji_webot_project/protos/RobotisLds01.proto"
 EXTERNPROTO "/home/jerry/Documents/webots/tongji_webot_project/protos/VelodyneHDL-64E.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Parquetry.proto"
 
 WorldInfo {
   info [
@@ -31,8 +30,8 @@ WorldInfo {
   title "Office Floor"
 }
 Viewpoint {
-  orientation -0.049131978583799446 0.9987872753829666 0.003166577570708114 1.4409652242786766
-  position -8.96277970830496 21.852061405512792 13.821402893760602
+  orientation 0.023000409185149274 0.997773017937432 -0.06260979039531123 1.281329528609044
+  position -1.9492711741776678 12.563924976993896 21.954978799359342
   follow "TurtleBot3Burger"
   followType "Mounted Shot"
 }
@@ -44,17 +43,134 @@ TexturedBackground {
 TexturedBackgroundLight {
   texture "entrance_hall"
 }
-Floor {
+Solid {
   translation 0 7.5 0
-  size 20 40
-  tileSize 0.5 1
-  appearance Parquetry {
-    type "light strip"
-    textureTransform TextureTransform {
-      rotation 1.57
-      scale 0.4 0.4
+  children [
+    Shape {
+      appearance Parquetry {
+        type "light strip"
+        textureTransform TextureTransform {
+          rotation 1.57
+          scale 0.4 0.4
+        }
+      }
+      geometry IndexedFaceSet {
+        coord Coordinate {
+          point [
+            -10 -20 0
+            10 -20 0
+            -10 20 0
+            10 20 0
+          ]
+        }
+        texCoord TextureCoordinate {
+          point [
+            0 0
+            40 0
+            0 40
+            40 40
+          ]
+        }
+        coordIndex [
+          2, 0, 1, 3, -1
+        ]
+        texCoordIndex [
+          2, 0, 1, 3, -1
+        ]
+      }
     }
+  ]
+  name "floor"
+  model "floor"
+  boundingObject Plane {
+    size 20 40
   }
+  locked TRUE
+}
+PottedTree {
+  translation -0.02133 15.0827 3.55271e-15
+  name "potted tree(20)"
+}
+PottedTree {
+  translation -2.14133 15.0827 3.55271e-15
+  name "potted tree(21)"
+}
+PottedTree {
+  translation -4.70133 14.3127 3.55271e-15
+  name "potted tree(22)"
+}
+PottedTree {
+  translation 8.85867 2.1127 3.55271e-15
+  name "potted tree(18)"
+}
+PottedTree {
+  translation 4.62867 3.3927 3.55271e-15
+  name "potted tree(26)"
+}
+PottedTree {
+  translation 4.29867 -1.1773 3.55271e-15
+  name "potted tree(31)"
+}
+PottedTree {
+  translation 0.78867 -3.3573 3.55271e-15
+  name "potted tree(32)"
+}
+PottedTree {
+  translation 1.87867 -6.9473 3.55271e-15
+  name "potted tree(33)"
+}
+PottedTree {
+  translation 1.32867 1.9627 3.55271e-15
+  name "potted tree(24)"
+}
+PottedTree {
+  translation 0.25867 3.9427 3.55271e-15
+  name "potted tree(25)"
+}
+PottedTree {
+  translation -1.44133 3.7927 3.55271e-15
+  name "potted tree(23)"
+}
+PottedTree {
+  translation 4.33867 11.7327 3.55271e-15
+  name "potted tree(17)"
+}
+PottedTree {
+  translation 1.59867 14.3027 3.55271e-15
+  name "potted tree(19)"
+}
+PottedTree {
+  translation -8.89133 13.8327 3.55271e-15
+  name "potted tree(13)"
+}
+PottedTree {
+  translation 6.54867 13.9327 3.55271e-15
+  name "potted tree(14)"
+}
+PottedTree {
+  translation 4.35867 6.7927 3.55271e-15
+  name "potted tree(16)"
+}
+PottedTree {
+  translation 9.07867 12.8027 3.55271e-15
+  name "potted tree(15)"
+}
+PottedTree {
+  translation -5.57133 5.26267 3.55271e-15
+  name "potted tree(10)"
+}
+PottedTree {
+  translation -5.57133 8.62267 3.55271e-15
+  name "potted tree(11)"
+}
+PottedTree {
+  translation -6.81133 4.54267 3.55271e-15
+  name "potted tree(9)"
+}
+Sofa {
+  translation -0.594354 -11.7775 8.17124e-14
+  rotation 0 0 1 1.57079
+  name "sofa(7)"
 }
 Wall {
   translation 0 -12.41 -0.03
@@ -67,22 +183,16 @@ Wall {
   size 20 0.2 4
 }
 OfficeChair {
-  hidden position_0_0 0.6995549031512941
-  hidden rotation_1 0 0 1 0.6995549031512939
   translation -5.5101 16.4981 -0.00141528
   rotation 0.025766538000273124 -0.0339388816320791 -0.9990917064179065 0.03226929645808992
   name "office chair(26)"
 }
 OfficeChair {
-  hidden position_0_0 0.6819838006097326
-  hidden rotation_1 0 0 1 0.6819838006097328
   translation -5.35267 19.8076 -0.00141529
   rotation 0.025658139360354895 -0.035013600446900044 -0.9990574095958198 0.031703515450859684
   name "office chair(25)"
 }
 OfficeChair {
-  hidden position_0_0 0.6758528180310409
-  hidden rotation_1 0 0 1 0.6758528180310409
   translation -5.4571 23.0694 -0.00141529
   rotation 0.025341387394837503 -0.035026097587856186 -0.9990650562264055 0.031842082327187674
   name "office chair(24)"
@@ -118,7 +228,7 @@ CeilingLight {
   pointLightCastShadows TRUE
 }
 CeilingLight {
-  translation -6 7.12 2.5
+  translation -8.06 7.12 2.5
   name "ceiling light(7)"
   bulbColor 0.913725 0.72549 0.431373
   supportColor 0.533333 0.541176 1
@@ -190,7 +300,7 @@ CeilingLight {
   pointLightCastShadows TRUE
 }
 CeilingLight {
-  translation -6 3.63 2.5
+  translation -8.07 3.63 2.5
   name "ceiling light(2)"
   bulbColor 0.913725 0.72549 0.431373
   supportColor 0.533333 0.541176 1
@@ -235,10 +345,10 @@ CeilingLight {
   pointLightCastShadows TRUE
 }
 Wall {
-  translation 4.63 -9.98 1.85
+  translation 4.97 -10.33 0
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right"
-  size 3.5 5 0.4
+  size 3.5 4 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.890196 0.3 0.5
     textureTransform TextureTransform {
@@ -247,7 +357,7 @@ Wall {
   }
 }
 Wall {
-  translation 2.13 -9.98 1.85
+  translation 2.13 -9.98 0
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(7)"
   size 3.5 5 0.4
@@ -271,10 +381,10 @@ Wall {
   }
 }
 Wall {
-  translation 4.99 8.96 1.85
+  translation 4.99 9.5 0
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(3)"
-  size 3.5 7 0.25
+  size 3.5 6 0.25
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.6 0.3 1
     textureTransform TextureTransform {
@@ -331,10 +441,10 @@ Wall {
   }
 }
 Wall {
-  translation 4.99 -1.79 1.85
+  translation 4.99 -2.1 0
   rotation 0 1 0 -1.5707953071795862
   name "outer wall south right(6)"
-  size 3.5 7 0.4
+  size 3.5 5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.3 0.803922 1
     textureTransform TextureTransform {
@@ -343,7 +453,7 @@ Wall {
   }
 }
 Wall {
-  translation 7.48 -3.93 1.85
+  translation 7.48 -3.93 0
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(1)"
   size 3.5 5 0.4
@@ -355,7 +465,7 @@ Wall {
   }
 }
 Wall {
-  translation 7.52 3.57 1.85
+  translation 7.52 3.57 0
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(2)"
   size 3.5 5 0.4
@@ -367,7 +477,7 @@ Wall {
   }
 }
 Wall {
-  translation 7.48 12.48 1.85
+  translation 7.48 12.48 0
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(4)"
   size 3.5 5 0.3
@@ -379,7 +489,7 @@ Wall {
   }
 }
 Wall {
-  translation 6.098 14.2829 -0.170008
+  translation 6.098 14.3629 -0.170008
   rotation 0.5773509358560258 -0.577349935856137 0.577349935856137 2.09439
   name "outer wall south right(8)"
   size 3.5 8 0.06
@@ -438,10 +548,10 @@ Wall {
   }
 }
 Wall {
-  translation -5.96 5.45 1.2
+  translation -5.96 5.23 1.2
   rotation -0.5773509358554485 0.5773489358556708 0.5773509358554485 -2.094395307179586
   name "wall(10)"
-  size 4 2.5 0.5
+  size 2 2.5 0.5
   appearance DEF WALL_APP Roughcast {
     colorOverride 0 0 0
     textureTransform TextureTransform {
@@ -462,10 +572,10 @@ Wall {
   }
 }
 Wall {
-  translation -1.16 -7.36 1.26
+  translation -1.57 -7.43 1.26
   rotation 1.2298304890504849e-06 -0.7071072811860348 0.7071062811856371 3.14159
   name "wall(6)"
-  size 4 2.5 0.4
+  size 2.5 2.5 0.4
   appearance DEF WALL_APP Roughcast {
     colorOverride 0.5 0.5 0.5
     textureTransform TextureTransform {
@@ -743,8 +853,6 @@ Table {
   }
 }
 OfficeChair {
-  hidden position_0_0 -0.013078482000341323
-  hidden rotation_1 0 0 -1 0.013078482000353052
   translation -7.929133307167569 -0.6006085100843469 -0.001415105678777312
   rotation -0.019620198325449326 -0.9985908018182212 0.049309819931855 0.0014071051357104163
 }
@@ -779,161 +887,115 @@ Table {
   }
 }
 OfficeChair {
-  hidden position_0_0 0.01659528294193425
-  hidden rotation_1 0 0 1 0.016595282941941084
   translation 9.67425 6.30315 -0.00142693
   rotation 0.0007088105838798006 -0.000737918097866824 0.9999994765320817 1.5135936720723886
 }
 OfficeChair {
-  hidden position_0_0 0.01657960709973306
-  hidden rotation_1 0 0 1 0.016579607099737995
   translation 9.30762 7.94719 -0.00142263
   rotation 0.0007087997301634299 -0.0007379314662636545 0.9999994765299097 1.5135900324784803
   name "office chair(1)"
 }
 OfficeChair {
-  hidden position_0_0 0.016574571961537783
-  hidden rotation_1 0 0 1 0.016574571961547276
   translation 5.76552 6.78783 -0.00142145
   rotation 0.0007087962364825308 -0.0007379348890882506 0.9999994765298603 1.5135900325559066
   name "office chair(2)"
 }
 OfficeChair {
-  hidden position_0_0 0.017313373438865083
-  hidden rotation_1 0 0 1 0.017313373438875644
   translation 8.99121 9.41771 -0.00140999
   rotation -0.0006964085741061756 -0.0006698488534267031 -0.9999995331586967 1.6280043264185466
   name "office chair(3)"
 }
 OfficeChair {
-  hidden position_0_0 0.017926533407952368
-  hidden rotation_1 0 0 1 0.0179265334079626
   translation 5.6177 8.2287 -0.00140735
   rotation -0.00069601451067753 -0.000670249580665435 -0.9999995331645415 1.6280052755034422
   name "office chair(4)"
 }
 OfficeChair {
-  hidden position_0_0 0.00956031487054055
-  hidden rotation_1 0 0 1 0.009560314870544496
   translation 5.54378 9.95809 -0.0014146
   rotation -0.0007013172217718239 -0.0006936105743989033 -0.9999995135291444 1.585459691607819
   name "office chair(5)"
 }
 OfficeChair {
-  hidden position_0_0 0.28279011761813055
-  hidden rotation_1 0 0 1 0.28279011761812994
   translation 9.11733 16.8828 -0.00141535
   rotation 0.00069838955776364 9.41419022311325e-05 0.9999997516946331 2.8856277649872655
   name "office chair(6)"
 }
 OfficeChair {
-  hidden position_0_0 0.2705961816394155
-  hidden rotation_1 0 0 1 0.27059618163941473
   translation 8.94211 20.1753 -0.00141535
   rotation 0.0007050073272381139 6.518320022387898e-05 0.9999997493578779 2.8253602704875416
   name "office chair(7)"
 }
 OfficeChair {
-  hidden position_0_0 0.2879602404752631
-  hidden rotation_1 0 0 1 0.2879602404752628
   translation 9.04628 23.3613 -0.00141536
   rotation 0.0006748563262161595 0.0001815302775540029 0.9999997558078189 3.1332954713161545
   name "office chair(8)"
 }
 OfficeChair {
-  hidden position_0_0 0.3184672642026719
-  hidden rotation_1 0 0 1 0.31846726420267135
   translation 9.07834 26.3653 -0.00141537
   rotation 0.0006687182693117055 0.00020078224642262077 0.9999997562511531 3.1327026334030106
   name "office chair(9)"
 }
 OfficeChair {
-  hidden position_0_0 0.37232204046925793
-  hidden rotation_1 0 0 0.9999999999999999 0.3723220404692582
   translation 6.34621 26.5648 -0.00241138
   rotation 0.0006511196039588892 0.00024895364372781373 0.9999997570326429 -3.106808705880405
   name "office chair(10)"
 }
 OfficeChair {
-  hidden position_0_0 0.45760108587390064
-  hidden rotation_1 0 0 1 0.4576010858739004
   translation 6.18162 23.2859 -0.00214802
   rotation 0.0006260034927071586 0.0003017902417804265 0.9999997585211093 -3.103042209780291
   name "office chair(12)"
 }
 OfficeChair {
-  hidden position_0_0 0.603888055639827
-  hidden rotation_1 0 0 1 0.6038880556398271
   translation 6.03632 20.1198 -0.00200765
   rotation 0.0005992976179083524 0.00034481891431046403 0.9999997609711121 3.0420736164090956
   name "office chair(13)"
 }
 OfficeChair {
-  hidden position_0_0 0.5184566109401667
-  hidden rotation_1 0 0 1 0.518456610940167
   translation 6.02189 16.6503 -0.00210076
   rotation 0.0006138133851933518 0.00032198041667366945 0.999999759780841 3.1301581845243067
   name "office chair(14)"
 }
 OfficeChair {
-  hidden position_0_0 0.6114746238785549
-  hidden rotation_1 0 0 1 0.6114746238785548
   translation 3.47654 26.5381 -0.00269784
   rotation 0.0005777530641810796 0.0003778225693009562 0.999999761725723 3.141343306930852
   name "office chair(11)"
 }
 OfficeChair {
-  hidden position_0_0 0.569672359242982
-  hidden rotation_1 0 0 0.9999999999999999 0.569672359242982
   translation -5.38293 26.1575 -0.00141535
   rotation 0.0004803697355342422 -0.002152471357784738 -0.9999975680530283 0.6379548211456771
   name "office chair(18)"
 }
 OfficeChair {
-  hidden position_0_0 0.5996519499905064
-  hidden rotation_1 0 0 1 0.5996519499905066
   translation -8.64112 26.3216 -0.00141534
   rotation 0.01363313899870121 -0.0200915434291525 0.9997051902454425 0.05690096504313992
   name "office chair(19)"
 }
 OfficeChair {
-  hidden position_0_0 0.47280865825134644
-  hidden rotation_1 0 0 1 0.47280865825134644
   translation -8.70486 19.9454 -0.00141538
   rotation 0.015949646607250373 -0.03186236482861876 0.9993649976263086 0.03897978822783529
   name "office chair(20)"
 }
 OfficeChair {
-  hidden position_0_0 0.6828460458546773
-  hidden rotation_1 0 0 1 0.6828460458546776
   translation -8.81759 16.4686 -0.00141529
   rotation 0.024491624708088088 -0.03341554400859732 -0.9991414122824495 0.033216318692276224
   name "office chair(23)"
 }
 OfficeChair {
-  hidden position_0_0 1.6220046315172636
-  hidden rotation_1 0 0 1 1.6220046315172638
   translation -8.66647 23.0781 0.0154096
   rotation 0.06452745222386046 0.14118550056196708 -0.9878779592341173 0.6299832228754247
   name "office chair(21)"
 }
 OfficeChair {
-  hidden position_0_0 0.48987101970074287
-  hidden rotation_1 0 0 1 0.4898710197007428
   translation 3.59394 23.3097 -0.00293172
   rotation 0.0006252755608199024 0.0003010864340103929 0.9999997591886873 3.1168447648015567
   name "office chair(15)"
 }
 OfficeChair {
-  hidden position_0_0 0.3860166765901906
-  hidden rotation_1 0 0 1 0.38601667659019084
   translation 3.45965 20.2389 -0.00291444
   rotation 0.0006328796259550356 0.00029605884055938043 0.9999997559062411 -2.98841901414555
   name "office chair(16)"
 }
 OfficeChair {
-  hidden position_0_0 0.5329125885772424
-  hidden rotation_1 0 0 1 0.532912588577242
   translation 3.30981 16.5159 -0.0026293
   rotation 0.0006195758418583013 0.00031088825112073596 0.9999997597371069 3.066053112478347
   name "office chair(17)"
@@ -948,8 +1010,6 @@ Table {
   }
 }
 OfficeChair {
-  hidden position_0_0 -0.012817761997548693
-  hidden rotation_1 0 0 -1 0.012817761997552997
   translation 7.327282816246936 -11.344925891036487 -0.0014151060032536744
   rotation 0.0006889332863681823 -0.0007149236508850498 0.9999995071274288 1.5726392114742849
   name "reception chair"
@@ -982,17 +1042,32 @@ Sofa {
   name "sofa(3)"
 }
 Sofa {
-  translation 1.2101 10.08 0
+  translation 1.2101 10.08 -0.12
   rotation 0 0 1 3.14159
   name "sofa(5)"
 }
 Sofa {
-  translation 1.2101 8.27001 0
+  translation 1.2101 7.16001 -0.11
   rotation 0 0 1 3.14159
   name "sofa(6)"
 }
 Sofa {
-  translation -5.78 -10.74 0
+  translation -6.49988 11.69 -0.12
+  rotation 0 0 1 -5.307179586466759e-06
+  name "sofa(8)"
+}
+Sofa {
+  translation 2.51012 8.94 -0.13
+  rotation 0 0 1 -5.307179586466759e-06
+  name "sofa(10)"
+}
+Sofa {
+  translation -8.88988 11.69 -0.13
+  rotation 0 0 1 -5.307179586466759e-06
+  name "sofa(9)"
+}
+Sofa {
+  translation -6.41435 -10.7675 8.17124e-14
   rotation 0 0 1 1.57079
   name "sofa(4)"
 }
@@ -1016,8 +1091,56 @@ PottedTree {
   name "potted tree(1)"
 }
 PottedTree {
-  translation -8 -2.55 0
+  translation 4.91 -5.26 0
+  name "potted tree(34)"
+}
+PottedTree {
+  translation -8 -5.01 0
   name "potted tree(2)"
+}
+PottedTree {
+  translation -2.58 -2.55 0
+  name "potted tree(30)"
+}
+PottedTree {
+  translation -6.07 -8.88 0
+  name "potted tree(27)"
+}
+PottedTree {
+  translation -4.17 -10.98 0
+  name "potted tree(29)"
+}
+PottedTree {
+  translation -8.9 -6.56 0
+  name "potted tree(28)"
+}
+PottedTree {
+  translation -9.56 -3.2 0
+  name "potted tree(12)"
+}
+PottedTree {
+  translation -2.43133 5.01267 3.55271e-15
+  name "potted tree(3)"
+}
+PottedTree {
+  translation -2.28133 2.19267 3.55271e-15
+  name "potted tree(6)"
+}
+PottedTree {
+  translation -8.12133 5.70267 3.55271e-15
+  name "potted tree(4)"
+}
+PottedTree {
+  translation -9.45133 7.00267 3.55271e-15
+  name "potted tree(8)"
+}
+PottedTree {
+  translation -9.37133 2.75267 3.55271e-15
+  name "potted tree(7)"
+}
+PottedTree {
+  translation -5.59133 1.99267 3.55271e-15
+  name "potted tree(5)"
 }
 StraightStairs {
   translation -1.72 0.61 0
@@ -1028,7 +1151,7 @@ StraightStairs {
   name "straight stairs(1)"
 }
 TurtleBot3Burger {
-  translation -8.92358 21.3748 1.77635e-15
+  translation 3.37136 13.4093 5.32906e-15
   controller "<extern>"
   controllerArgs [
     ""
@@ -1047,6 +1170,7 @@ TurtleBot3Burger {
       name "inertial_unit"
     }
     RobotisLds01 {
+      translation 0 0 -0.07
       enablePhysics FALSE
     }
   ]
