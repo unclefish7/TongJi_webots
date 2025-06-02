@@ -49,12 +49,12 @@ def generate_launch_description():
     )
 
     # 添加map到odom的变换关系，确保SLAM可以正确建立坐标系
-    # map_to_odom_publisher = Node(
-    #     package='tf2_ros',
-    #     executable='static_transform_publisher',
-    #     output='screen',
-    #     arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
-    # )
+    map_to_odom_publisher = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
+    )
 
     # slam_node = Node(
     #     package='slam_toolbox',
@@ -103,17 +103,25 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         output='screen',
-        arguments=['0', '0', '0.25', '0', '0', '0', 'base_link', 'velodyne_link']
+        arguments=['--use-timestamp', '0', '0', '0.25', '0', '0', '0', 'base_link', 'velodyne_link']
     )
+
+    robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot.urdf')
+
+    with open(robot_description_path, 'r') as f:
+        robot_description = f.read()
 
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
+        name='robot_state_publisher',
         output='screen',
         parameters=[{
-            'robot_description': '<robot name=""><link name=""/></robot>'
+            'robot_description': robot_description,
+            'use_sim_time': use_sim_time,
         }],
     )
+
 
     footprint_publisher = Node(
         package='tf2_ros',
@@ -141,7 +149,7 @@ def generate_launch_description():
     )
     ros_control_spawners = [diffdrive_controller_spawner, joint_state_broadcaster_spawner]
 
-    robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot.urdf')
+    
     ros2_control_params = os.path.join(package_dir, 'resource', 'ros2control.yml')
     use_twist_stamped = 'ROS_DISTRO' in os.environ and (os.environ['ROS_DISTRO'] in ['rolling', 'jazzy'])
     if use_twist_stamped:
@@ -197,7 +205,7 @@ def generate_launch_description():
 
         # pointcloud_to_laserscan_node,
         # slam_node,
-        # map_to_odom_publisher,
+        map_to_odom_publisher,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
