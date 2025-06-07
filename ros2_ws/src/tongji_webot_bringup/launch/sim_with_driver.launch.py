@@ -1,24 +1,8 @@
 #!/usr/bin/env python
 
-# Copyright 1996-2023 Cyberbotics Ltd.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Launch Webots TurtleBot3 Burger driver."""
-
 import os
 from launch.substitutions import LaunchConfiguration
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch import LaunchDescription
 from launch_ros.actions import Node
 import launch
@@ -45,59 +29,15 @@ def generate_launch_description():
         executable='teleop_twist_keyboard',
         name='keyboard_teleop',
         output='screen',
-        prefix='xterm -e',  # 打开独立终端窗口（可选）
+        prefix='xterm -e',
     )
 
-    # 添加map到odom的变换关系，确保SLAM可以正确建立坐标系
     map_to_odom_publisher = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         output='screen',
         arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
     )
-
-    # slam_node = Node(
-    #     package='slam_toolbox',
-    #     executable='sync_slam_toolbox_node',
-    #     name='slam_toolbox',
-    #     output='screen',
-    #     parameters=[{
-    #         'use_sim_time': use_sim_time,
-    #         'resolution': 0.05,
-    #         'max_laser_range': 20.0,
-    #         'map_update_interval': 5.0,
-    #         'enable_interactive_mode': False,
-    #         'scan_topic': '/scan',  # 明确指定使用/scan话题
-    #         'minimum_travel_distance': 0.5,
-    #         'minimum_travel_heading': 0.5,
-    #         'loop_search_maximum_distance': 3.0,
-    #         'map_file_name': '',
-    #         'mode': 'mapping',
-    #     }],
-    # )
-
-    # pointcloud_to_laserscan_node = Node(
-    #     package='pointcloud_to_laserscan',
-    #     executable='pointcloud_to_laserscan_node',
-    #     name='pointcloud_to_laserscan',
-    #     output='screen',
-    #     parameters=[{
-    #         'target_frame': 'base_link',
-    #         'transform_tolerance': 0.01,
-    #         'min_height': -0.1,
-    #         'max_height': 0.1,
-    #         'angle_min': -3.14,
-    #         'angle_max': 3.14,
-    #         'angle_increment': 0.01,
-    #         'scan_time': 0.1,
-    #         'range_min': 0.1,
-    #         'range_max': 30.0,
-    #     }],
-    #     remappings=[
-    #         ('/cloud_in', '/velodyne_points'),
-    #         ('/scan', '/scan'),
-    #     ]
-    # )
 
     velodyne_tf_publisher = Node(
         package='tf2_ros',
@@ -107,7 +47,6 @@ def generate_launch_description():
     )
 
     robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot.urdf')
-
     with open(robot_description_path, 'r') as f:
         robot_description = f.read()
 
@@ -122,7 +61,6 @@ def generate_launch_description():
         }],
     )
 
-
     footprint_publisher = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -130,7 +68,6 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'base_footprint'],
     )
 
-    # ROS control spawners
     controller_manager_timeout = ['--controller-manager-timeout', '50']
     controller_manager_prefix = 'python.exe' if os.name == 'nt' else ''
     diffdrive_controller_spawner = Node(
@@ -149,13 +86,13 @@ def generate_launch_description():
     )
     ros_control_spawners = [diffdrive_controller_spawner, joint_state_broadcaster_spawner]
 
-    
     ros2_control_params = os.path.join(package_dir, 'resource', 'ros2control.yml')
     use_twist_stamped = 'ROS_DISTRO' in os.environ and (os.environ['ROS_DISTRO'] in ['rolling', 'jazzy'])
     if use_twist_stamped:
         mappings = [('/diffdrive_controller/cmd_vel', '/cmd_vel'), ('/diffdrive_controller/odom', '/odom')]
     else:
         mappings = [('/diffdrive_controller/cmd_vel_unstamped', '/cmd_vel'), ('/diffdrive_controller/odom', '/odom')]
+
     turtlebot_driver = WebotsController(
         robot_name='TurtleBot3Burger',
         parameters=[
@@ -168,52 +105,49 @@ def generate_launch_description():
         respawn=True
     )
 
-    # 等待驱动节点连接后再启动 ros2_control 控制器
     waiting_nodes = WaitForControllerConnection(
         target_driver=turtlebot_driver,
         nodes_to_start=ros_control_spawners
     )
 
+    # ⏱ 延迟启动 Webots 控制器和控制器 spawner，确保 TF 提前发布
+    delayed_turtlebot_driver = TimerAction(
+        period=3.0,
+        actions=[turtlebot_driver]
+    )
+    delayed_waiting_nodes = TimerAction(
+        period=4.0,
+        actions=[waiting_nodes]
+    )
+    delayed_keyboard_teleop = TimerAction(
+        period=5.0,
+        actions=[keyboard_teleop_node]
+    )
+
     return LaunchDescription([
-        DeclareLaunchArgument(
-            'world',
-            default_value='office_simple.wbt',
-            description='Choose one of the world files from `/webots_ros2_turtlebot/world` directory'
-        ),
-        DeclareLaunchArgument(
-            'mode',
-            default_value='realtime',
-            description='Webots startup mode'
-        ),
+        DeclareLaunchArgument('world', default_value='office_simple.wbt'),
+        DeclareLaunchArgument('mode', default_value='realtime'),
+        DeclareLaunchArgument('use_sim_time', default_value='true'),
+
         webots,
         webots._supervisor,
 
+        # 🚀 优先发布静态 TF（避免 message filter 报错）
         robot_state_publisher,
         footprint_publisher,
         velodyne_tf_publisher,
-        keyboard_teleop_node,
-        
-        turtlebot_driver,
-        waiting_nodes,
-
-        # Node(
-        #     package='tongji_webot_bringup',
-        #     executable='clock_publisher',
-        #     name='sim_clock_publisher',
-        #     output='screen'
-        # ),
-
-        # pointcloud_to_laserscan_node,
-        # slam_node,
         map_to_odom_publisher,
 
-        # This action will kill all nodes once the Webots simulation has exited
+        # ⏱ 延迟发布雷达 scan（来自驱动器）
+        delayed_turtlebot_driver,
+        delayed_waiting_nodes,
+        delayed_keyboard_teleop,
+
+        # Webots 退出时自动关闭 ROS
         launch.actions.RegisterEventHandler(
             event_handler=launch.event_handlers.OnProcessExit(
                 target_action=webots,
-                on_exit=[
-                    launch.actions.EmitEvent(event=launch.events.Shutdown())
-                ],
+                on_exit=[launch.actions.EmitEvent(event=launch.events.Shutdown())],
             )
         ),
     ])
