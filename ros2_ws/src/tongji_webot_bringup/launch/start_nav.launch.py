@@ -16,7 +16,7 @@ def generate_launch_description():
     )
 
     nav2_launch = TimerAction(
-        period=3.0,  # 延迟 3 秒启动 Nav2，等 Webots clock 和 TF 建立
+        period=10.0,  # 增加延迟到10秒，确保所有TF变换和scan数据就绪
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([

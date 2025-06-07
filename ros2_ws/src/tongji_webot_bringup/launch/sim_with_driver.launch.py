@@ -46,6 +46,14 @@ def generate_launch_description():
         arguments=['--use-timestamp', '0', '0', '0.25', '0', '0', '0', 'base_link', 'velodyne_link']
     )
 
+    # 添加LDS-01激光雷达帧的TF变换
+    lds_tf_publisher = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '0.18', '0', '0', '0', 'base_link', 'LDS-01']
+    )
+
     robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot.urdf')
     with open(robot_description_path, 'r') as f:
         robot_description = f.read()
@@ -112,15 +120,15 @@ def generate_launch_description():
 
     # ⏱ 延迟启动 Webots 控制器和控制器 spawner，确保 TF 提前发布
     delayed_turtlebot_driver = TimerAction(
-        period=3.0,
+        period=5.0,  # 增加延迟时间到5秒
         actions=[turtlebot_driver]
     )
     delayed_waiting_nodes = TimerAction(
-        period=4.0,
+        period=6.0,  # 增加延迟时间到6秒
         actions=[waiting_nodes]
     )
     delayed_keyboard_teleop = TimerAction(
-        period=5.0,
+        period=7.0,  # 增加延迟时间到7秒
         actions=[keyboard_teleop_node]
     )
 
@@ -133,9 +141,10 @@ def generate_launch_description():
         webots._supervisor,
 
         # 🚀 优先发布静态 TF（避免 message filter 报错）
-        robot_state_publisher,
+        # robot_state_publisher,
         footprint_publisher,
         velodyne_tf_publisher,
+        lds_tf_publisher,  # 添加LDS-01激光雷达TF
         map_to_odom_publisher,
 
         # ⏱ 延迟发布雷达 scan（来自驱动器）
