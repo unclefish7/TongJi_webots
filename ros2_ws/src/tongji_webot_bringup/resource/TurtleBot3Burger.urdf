@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<robot name="TurtleBot3Burger.urdf" xmlns:xacro="http://ros.org/wiki/xacro">
+<robot name="/home/jerry/Documents/TurtleBot3Burger.urdf" xmlns:xacro="http://ros.org/wiki/xacro">
   <link name="base_link">
     <visual>
       <origin xyz="-0.032 0 0.08" rpy="0 0 0"/>
@@ -51,8 +51,8 @@
     <parent link="base_link"/>
     <child link="left wheel"/>
     <axis xyz="-0.000003 -1 0.000003"/>
-    <limit effort="10" velocity="6.67"/>
-    <origin xyz="0 0.08 0.033" rpy="-0.526852 -1.57079 -2.614737"/>
+    <limit effort="10" velocity="50"/>
+    <origin xyz="0 0.08 0.033" rpy="-3.141591 0.542875 -0.000004"/>
   </joint>
   <link name="left wheel">
     <visual>
@@ -72,8 +72,8 @@
     <parent link="base_link"/>
     <child link="right wheel"/>
     <axis xyz="0 1 0"/>
-    <limit effort="10" velocity="6.67"/>
-    <origin xyz="0 -0.08 0.033" rpy="0 -1.570796 0"/>
+    <limit effort="10" velocity="50"/>
+    <origin xyz="0 -0.08 0.033" rpy="0 1.093886 0"/>
   </joint>
   <link name="right wheel">
     <visual>
@@ -118,7 +118,7 @@
   <joint name="base_link_LDS-01_joint" type="fixed">
     <parent link="base_link"/>
     <child link="LDS-01"/>
-    <origin xyz="-0.03 0 0.173" rpy="0 0 0"/>
+    <origin xyz="-0.03 0 0.083" rpy="0 0 0"/>
   </joint>
   <link name="screw3">
     <visual>
@@ -333,17 +333,52 @@
     <child link="solid_0"/>
     <origin xyz="0 0 -0.08" rpy="1.570807 0 0"/>
   </joint>
-      <ros2_control name="WebotsControl" type="system">
-        <hardware>
-            <plugin>webots_ros2_control::Ros2ControlSystem</plugin>
-        </hardware>
-        <joint name="right wheel motor">
-            <state_interface name="position"/>
-            <command_interface name="velocity"/>
-        </joint>
-        <joint name="left wheel motor">
-            <state_interface name="position"/>
-            <command_interface name="velocity"/>
-        </joint>
-    </ros2_control>
+
+  <webots>
+    <device reference="Velodyne HDL-64E" type="Lidar">
+      <ros>
+        <enabled>true</enabled>
+        <updateRate>10</updateRate>
+        <topicName>/velodyne_points</topicName>
+        <frameName>velodyne_link</frameName>
+      </ros>
+    </device>
+    <device reference="LDS-01" type="Lidar">
+      <ros>
+        <enabled>true</enabled>
+        <updateRate>5</updateRate>
+        <topicName>/scan</topicName>
+        <alwaysOn>false</alwaysOn>
+        <frameName>LDS-01</frameName>
+      </ros>
+    </device>
+
+    <plugin type="webots_ros2_driver::Ros2IMU">
+      <enabled>true</enabled>
+      <updateRate>20</updateRate>
+      <topicName>/imu</topicName>
+      <alwaysOn>false</alwaysOn>
+      <frameName>imu_link</frameName>
+      <inertialUnitName>inertial_unit</inertialUnitName>
+      <gyroName>gyro</gyroName>
+      <accelerometerName>accelerometer</accelerometerName>
+    </plugin>
+
+    <plugin type="webots_ros2_control::Ros2Control" />
+
+  </webots>
+
+  <ros2_control name="WebotsControl" type="system">
+    <hardware>
+      <plugin>webots_ros2_control::Ros2ControlSystem</plugin>
+    </hardware>
+    <joint name="right wheel motor">
+      <state_interface name="position"/>
+      <command_interface name="velocity"/>
+    </joint>
+    <joint name="left wheel motor">
+      <state_interface name="position"/>
+      <command_interface name="velocity"/>
+    </joint>
+  </ros2_control>
 </robot>

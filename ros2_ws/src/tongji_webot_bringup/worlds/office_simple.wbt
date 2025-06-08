@@ -28,6 +28,7 @@ WorldInfo {
     "Built with Webots R2023b PROTO nodes, following the style of the break_room example."
   ]
   title "Office Floor"
+  basicTimeStep 20
 }
 Viewpoint {
   orientation 0.023000409185149274 0.997773017937432 -0.06260979039531123 1.281329528609044
