@@ -1,0 +1,189 @@
+{
+	"User": {
+		"user_id": {
+			"type": "string",
+			"required": true,
+			"primary_key": true,
+			"description": "用户唯一编号（工号）"
+		},
+		"name": {
+			"type": "string",
+			"required": true,
+			"description": "用户姓名"
+		},
+		"role": {
+			"type": "enum",
+			"values": ["前台人员", "普通员工", "财务处", "经理"],
+			"required": true,
+			"description": "所属角色或部门（可选转为字典表）"
+		},
+		"auth_level": {
+			"type": "enum",
+			"values": ["L1", "L2", "L3"],
+			"required": true,
+			"description": "用户权限等级"
+		},
+		"otp": {
+			"type": "string",
+			"required": false,
+			"description": "一次性验证码（模拟）"
+		},
+		"face_id": {
+			"type": "string",
+			"required": false,
+			"description": "人脸识别 ID（模拟）"
+		}
+	},
+
+	"Task": {
+		"task_id": {
+			"type": "string",
+			"required": true,
+			"primary_key": true,
+			"generator": "timestamp+prefix",
+			"prefix": "T",
+			"format": "T{yyyyMMddHHmmss}",
+			"description": "任务唯一编号"
+		},
+		"initiator": {
+			"type": "string",
+			"required": true,
+			"ref": "User.user_id",
+			"description": "任务发起人"
+		},
+		"receiver": {
+			"type": "string",
+			"required": true,
+			"ref": "User.user_id",
+			"description": "接收人"
+		},
+		"location_id": {
+			"type": "string",
+			"required": true,
+			"ref": "Location.location_id",
+			"description": "目标位置（引用位置表）"
+		},
+		"security_level": {
+			"type": "enum",
+			"values": ["L1", "L2", "L3"],
+			"required": true,
+			"description": "任务所需安全等级"
+		},
+		"status": {
+			"type": "enum",
+			"values": ["pending", "authenticating", "delivering", "completed", "failed"],
+			"required": true,
+			"description": "任务状态"
+		},
+		"timestamps": {
+			"type": "object",
+			"required": true,
+			"description": "任务过程中的时间戳记录",
+			"fields": {
+				"created": { "type": "string", "format": "iso8601" },
+				"accepted": { "type": "string", "format": "iso8601", "nullable": true },
+				"delivered": { "type": "string", "format": "iso8601", "nullable": true }
+			}
+		}
+	},
+
+	"Log": {
+		"log_id": {
+			"type": "string",
+			"required": true,
+			"primary_key": true,
+			"generator": "timestamp+prefix",
+			"prefix": "LOG",
+			"format": "LOG{yyyyMMddHHmmss}",
+			"description": "日志唯一编号"
+		},
+		"log_type": {
+			"type": "enum",
+			"values": ["access", "auth", "delivery", "system", "error"],
+			"required": true,
+			"description": "日志类型"
+		},
+		"related_user": {
+			"type": "string",
+			"ref": "User.user_id",
+			"required": false,
+			"description": "相关用户"
+		},
+		"related_task": {
+			"type": "string",
+			"ref": "Task.task_id",
+			"required": false,
+			"description": "相关任务"
+		},
+		"related_locker": {
+			"type": "string",
+			"ref": "Locker.locker_id",
+			"required": false,
+			"description": "相关柜体"
+		},
+		"message": {
+			"type": "string",
+			"required": true,
+			"description": "日志正文内容（可描述行为、结果、异常等）"
+		},
+		"auth_mode": {
+			"type": "array",
+			"items": {
+				"type": "enum",
+				"values": ["ID", "OTP", "Face"]
+			},
+			"required": false,
+			"description": "使用的认证方式（仅对 access/auth 类型日志有效）"
+		},
+		"result": {
+			"type": "enum",
+			"values": ["success", "failed", "partial", "info"],
+			"required": false,
+			"description": "操作结果状态"
+		},
+		"timestamp": {
+			"type": "string",
+			"format": "iso8601",
+			"required": true,
+			"description": "记录时间"
+		}
+	},
+
+	"Locker": {
+		"locker_id": {
+			"type": "string",
+			"required": true,
+			"primary_key": true,
+			"description": "柜体唯一编号"
+		},
+		"status": {
+			"type": "enum",
+			"values": ["available", "in_use", "fault"],
+			"required": true,
+			"description": "当前柜体状态"
+		}
+	},
+
+	"Location": {
+		"location_id": {
+			"type": "string",
+			"required": true,
+			"primary_key": true,
+			"description": "位置唯一编号"
+		},
+		"label": {
+			"type": "string",
+			"required": true,
+			"description": "人类可读的位置名，如财务处、会议室A"
+		},
+		"coordinates": {
+			"type": "object",
+			"required": false,
+			"fields": {
+				"x": { "type": "float" },
+				"y": { "type": "float" }
+			},
+			"description": "二维平面坐标（可选）"
+		}
+	}
+}
