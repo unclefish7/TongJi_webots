@@ -144,6 +144,34 @@ def consume_auth(user_id: str, required_level: str) -> bool:
     
     return True
 
+def rollback_auth_consumption(user_id: str, security_level: str) -> bool:
+    """
+    回滚认证记录消费 - 将最近消费的认证记录标记为未使用
+    
+    Args:
+        user_id: 用户ID
+        security_level: 安全等级
+    
+    Returns:
+        bool: 是否成功回滚
+    """
+    if user_id not in auth_session_cache:
+        return False
+    
+    user_records = auth_session_cache[user_id]
+    required_level_num = LEVEL_ORDER.get(security_level, 0)
+    
+    # 找到最近使用的满足要求的认证记录并恢复
+    # 从后往前查找，因为最近的操作在列表末尾
+    for i in range(len(user_records) - 1, -1, -1):
+        record = user_records[i]
+        if (record["used"] and 
+            LEVEL_ORDER.get(record["level"], 0) >= required_level_num):
+            record["used"] = False
+            return True
+    
+    return False
+
 def get_auth_records(user_id: str) -> List[Dict]:
     """获取用户的所有认证记录"""
     return auth_session_cache.get(user_id, [])
@@ -159,3 +187,34 @@ def clear_used_auth_records(user_id: str) -> None:
         # 如果没有记录了，删除用户条目
         if not auth_session_cache[user_id]:
             del auth_session_cache[user_id]
+
+def get_auth_session_status(user_id: str) -> Dict[str, any]:
+    """
+    获取用户认证会话状态（用于调试和监控）
+    
+    Args:
+        user_id: 用户ID
+    
+    Returns:
+        Dict: 认证状态信息
+    """
+    if user_id not in auth_session_cache:
+        return {
+            "user_id": user_id,
+            "total_records": 0,
+            "available_records": 0,
+            "used_records": 0,
+            "records": []
+        }
+    
+    records = auth_session_cache[user_id]
+    available_count = sum(1 for r in records if not r["used"])
+    used_count = sum(1 for r in records if r["used"])
+    
+    return {
+        "user_id": user_id,
+        "total_records": len(records),
+        "available_records": available_count,
+        "used_records": used_count,
+        "records": records
+    }

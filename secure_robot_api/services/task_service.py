@@ -201,25 +201,36 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
     if not is_valid:
         return False, error_code, error_msg, None, None, None
     
-    # 尝试消费认证记录
-    auth_consumed = consume_auth(user_id, security_level)
-    if not auth_consumed:
-        return False, TaskErrorCodes.INSUFFICIENT_AUTH, f"Insufficient authentication for security level {security_level}. Please authenticate first.", None, None, None
+    # 事务性操作：认证消费和柜子分配
+    auth_consumed = False
+    locker_allocated = False
+    locker_id = None
     
-    # 查找可用柜子
-    available_locker = get_available_locker()
-    if not available_locker:
-        return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for task creation. Please try again later.", None, None, None
-    
-    locker_id = available_locker.get('locker_id')
-    
-    # 分配柜子
-    allocation_success, allocation_error = allocate_locker(locker_id)
-    if not allocation_success:
-        return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
-    
-    # 基于schema构建任务数据
     try:
+        # 步骤1：消费认证记录
+        auth_consumed = consume_auth(user_id, security_level)
+        if not auth_consumed:
+            return False, TaskErrorCodes.INSUFFICIENT_AUTH, f"Insufficient authentication for security level {security_level}. Please authenticate first.", None, None, None
+        
+        # 步骤2：查找并分配可用柜子
+        available_locker = get_available_locker()
+        if not available_locker:
+            # 如果没有可用柜子，需要回滚认证消费
+            rollback_auth_consumption(user_id, security_level)
+            return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for task creation. Please try again later.", None, None, None
+        
+        locker_id = available_locker.get('locker_id')
+        
+        # 分配柜子
+        allocation_success, allocation_error = allocate_locker(locker_id)
+        if not allocation_success:
+            # 如果柜子分配失败，需要回滚认证消费
+            rollback_auth_consumption(user_id, security_level)
+            return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
+        
+        locker_allocated = True
+        
+        # 步骤3：基于schema构建任务数据
         provided_values = {
             "description": description,
             "initiator": user_id,
@@ -234,12 +245,17 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         # 验证生成的任务数据
         is_valid, validation_error = validate_entity_against_schema("Task", task_data)
         if not is_valid:
-            # 如果验证失败，释放柜子
-            release_locker(locker_id)
+            # 如果验证失败，回滚所有操作
+            rollback_transaction(user_id, security_level, locker_id)
             return False, TaskErrorCodes.VALIDATION_FAILED, f"Task data validation failed: {validation_error}", None, None, None
         
-        # 保存任务到存储文件
-        save_task_to_storage(task_data)
+        # 步骤4：保存任务到存储文件
+        try:
+            save_task_to_storage(task_data)
+        except Exception as save_error:
+            # 如果保存失败，回滚所有操作
+            rollback_transaction(user_id, security_level, locker_id)
+            return False, TaskErrorCodes.SAVE_FAILED, f"Failed to save task: {str(save_error)}", None, None, None
         
         task_id = task_data.get("task_id")
         
@@ -253,25 +269,56 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         return True, TaskErrorCodes.SUCCESS, success_message, task_id, task_data, locker_id
         
     except Exception as e:
-        # 如果创建失败，释放柜子
-        release_locker(locker_id)
-        return False, TaskErrorCodes.SAVE_FAILED, f"Failed to create task: {str(e)}", None, None, None
+        # 如果发生任何未预期的异常，执行完整回滚
+        rollback_transaction(user_id, security_level, locker_id if locker_allocated else None)
+        return False, TaskErrorCodes.SAVE_FAILED, f"Unexpected error during task creation: {str(e)}", None, None, None
 
-def save_task_to_storage(task_data: Dict) -> None:
+def rollback_auth_consumption(user_id: str, security_level: str) -> None:
     """
-    保存任务到存储文件
+    回滚认证记录消费
     
     Args:
-        task_data: 任务数据
+        user_id: 用户ID
+        security_level: 安全等级
     """
-    # 加载现有任务
-    tasks = load_tasks()
+    try:
+        from services.auth_service import auth_session_cache, LEVEL_ORDER
+        
+        if user_id not in auth_session_cache:
+            return
+        
+        user_records = auth_session_cache[user_id]
+        required_level_num = LEVEL_ORDER.get(security_level, 0)
+        
+        # 找到最近使用的满足要求的认证记录并恢复
+        for record in reversed(user_records):
+            if (record["used"] and 
+                LEVEL_ORDER.get(record["level"], 0) >= required_level_num):
+                record["used"] = False
+                break
+                
+    except Exception as e:
+        # 记录回滚失败，但不抛出异常
+        print(f"Warning: Failed to rollback authentication consumption for user {user_id}: {str(e)}")
+
+def rollback_transaction(user_id: str, security_level: str, locker_id: Optional[str]) -> None:
+    """
+    回滚整个事务（认证消费 + 柜子分配）
     
-    # 添加新任务
-    tasks.append(task_data)
+    Args:
+        user_id: 用户ID
+        security_level: 安全等级
+        locker_id: 柜子ID（如果已分配）
+    """
+    # 回滚认证消费
+    rollback_auth_consumption(user_id, security_level)
     
-    # 保存回文件
-    save_tasks(tasks)
+    # 回滚柜子分配
+    if locker_id:
+        try:
+            release_locker(locker_id)
+        except Exception as e:
+            print(f"Warning: Failed to rollback locker allocation for locker {locker_id}: {str(e)}")
 
 def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[str] = None) -> tuple[bool, str]:
     """
