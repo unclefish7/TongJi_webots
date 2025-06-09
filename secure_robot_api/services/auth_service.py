@@ -26,13 +26,14 @@ def get_user_by_id(user_id: str) -> Optional[Dict]:
             return user
     return None
 
-def verify_auth(user_id: str, provided: Dict[str, str]) -> Tuple[bool, str, List[str]]:
+def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) -> Tuple[bool, str, List[str]]:
     """
-    验证用户认证 - 一次性验证，不依赖登录状态
+    验证用户认证 - 基于请求的认证等级进行验证
     
     Args:
         user_id: 用户ID（员工卡号）
-        provided: 提供的认证信息，可能包含 otp、face_id
+        requested_level: 请求的认证等级 (L1/L2/L3)
+        provided: 提供的认证信息，可能包含 l2_auth、l3_auth
     
     Returns:
         Tuple[bool, str, List[str]]: (是否认证成功, 验证等级, 使用的认证方式)
@@ -42,36 +43,43 @@ def verify_auth(user_id: str, provided: Dict[str, str]) -> Tuple[bool, str, List
     if not user:
         return False, "", []
     
-    auth_level = user.get('auth_level', '')
+    user_auth_level = user.get('auth_level', '')
+    requested_level_num = LEVEL_ORDER.get(requested_level, 0)
+    user_level_num = LEVEL_ORDER.get(user_auth_level, 0)
+    
+    # 检查请求的认证等级是否超过用户本身的等级
+    if requested_level_num > user_level_num:
+        return False, "", []
+    
     methods_used = ['ID']  # 基础ID验证
     
     # L1: 只需 user_id 匹配即可
-    if auth_level == 'L1':
+    if requested_level == 'L1':
         success, verified_level = True, 'L1'
     
-    # L2: 需要验证 OTP
-    elif auth_level == 'L2':
-        provided_otp = provided.get('otp', '')
-        user_otp = user.get('otp', '')
+    # L2: 需要验证 L2级认证信息
+    elif requested_level == 'L2':
+        provided_l2_auth = provided.get('l2_auth', '')
+        user_l2_auth = user.get('l2_auth', '')
         
-        if provided_otp and provided_otp == user_otp:
-            methods_used.append('OTP')
+        if provided_l2_auth and provided_l2_auth == user_l2_auth:
+            methods_used.append('L2')
             success, verified_level = True, 'L2'
         else:
             success, verified_level = False, ''
     
-    # L3: 需要验证 OTP + Face ID
-    elif auth_level == 'L3':
-        provided_otp = provided.get('otp', '')
-        provided_face_id = provided.get('face_id', '')
-        user_otp = user.get('otp', '')
-        user_face_id = user.get('face_id', '')
+    # L3: 需要验证 L2级认证信息 + L3级认证信息
+    elif requested_level == 'L3':
+        provided_l2_auth = provided.get('l2_auth', '')
+        provided_l3_auth = provided.get('l3_auth', '')
+        user_l2_auth = user.get('l2_auth', '')
+        user_l3_auth = user.get('l3_auth', '')
         
-        otp_valid = provided_otp and provided_otp == user_otp
-        face_valid = provided_face_id and provided_face_id == user_face_id
+        l2_valid = provided_l2_auth and provided_l2_auth == user_l2_auth
+        l3_valid = provided_l3_auth and provided_l3_auth == user_l3_auth
         
-        if otp_valid and face_valid:
-            methods_used.extend(['OTP', 'Face'])
+        if l2_valid and l3_valid:
+            methods_used.extend(['L2', 'L3'])
             success, verified_level = True, 'L3'
         else:
             success, verified_level = False, ''

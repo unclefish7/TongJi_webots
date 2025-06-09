@@ -23,15 +23,15 @@
 			"required": true,
 			"description": "用户权限等级"
 		},
-		"otp": {
+		"l2_auth": {
 			"type": "string",
 			"required": false,
-			"description": "一次性验证码（模拟）"
+			"description": "L2级认证信息（如OTP、PIN码等）"
 		},
-		"face_id": {
+		"l3_auth": {
 			"type": "string",
 			"required": false,
-			"description": "人脸识别 ID（模拟）"
+			"description": "L3级认证信息（如生物特征ID、硬件密钥等）"
 		}
 	},
 
@@ -135,7 +135,7 @@
 			"type": "array",
 			"items": {
 				"type": "enum",
-				"values": ["ID", "OTP", "Face"]
+				"values": ["ID", "L2", "L3"]
 			},
 			"required": false,
 			"description": "使用的认证方式（仅对 access/auth 类型日志有效）"

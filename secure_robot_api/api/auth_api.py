@@ -7,26 +7,33 @@ router = APIRouter(tags=["authentication"])
 @router.post("/verify", response_model=AuthResponse)
 async def verify_authentication(request: AuthRequest):
     """
-    一次性用户认证验证
+    基于指定认证等级的用户认证验证
     
     - **user_id**: 用户ID（员工卡号）
-    - **provided**: 提供的认证信息，可能包含 otp、face_id
+    - **requested_level**: 请求的认证等级 (L1/L2/L3)
+    - **provided**: 提供的认证信息，可能包含 l2_auth、l3_auth
     
-    认证模式（基于用户的 auth_level）：
-    - L1：只需 user_id 匹配即可
-    - L2：需要验证 user_id + otp
-    - L3：需要验证 user_id + otp + face_id
+    认证逻辑：
+    1. 验证请求的认证等级不能超过用户本身的最大等级
+    2. 根据请求的认证等级验证相应的凭证：
+       - L1：只需 user_id 匹配即可
+       - L2：需要验证 user_id + l2_auth
+       - L3：需要验证 user_id + l2_auth + l3_auth
     
     注意：每次请求都是独立的一次性认证，不依赖登录状态或会话
     """
     try:
-        success, verified_level, methods = verify_auth(request.user_id, request.provided)
+        success, verified_level, methods = verify_auth(
+            request.user_id, 
+            request.requested_level, 
+            request.provided
+        )
         
         if not success:
             # 认证失败
             raise HTTPException(
                 status_code=401, 
-                detail="Authentication failed"
+                detail=f"Authentication failed for level {request.requested_level}"
             )
         
         return AuthResponse(

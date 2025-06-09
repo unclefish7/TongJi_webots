@@ -6,7 +6,8 @@ class PingResponse(BaseModel):
 
 class AuthRequest(BaseModel):
     user_id: str
-    provided: Dict[str, str]  # 可能包含 otp、face_id
+    requested_level: str  # 请求的认证等级 L1/L2/L3
+    provided: Dict[str, str]  # 可能包含 l2_auth、l3_auth
 
 class AuthResponse(BaseModel):
     verified: bool

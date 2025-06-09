@@ -4,38 +4,38 @@
     "name": "王勇",
     "role": "财务处",
     "auth_level": "L3",
-    "otp": "546121",
-    "face_id": "FACE_EMP7064_4944"
+    "l2_auth": "546121",
+    "l3_auth": "FACE_EMP7064_4944"
   },
   {
     "user_id": "EMP4958",
     "name": "黄静",
     "role": "前台人员",
     "auth_level": "L2",
-    "otp": "495481",
-    "face_id": "FACE_EMP4958_3970"
+    "l2_auth": "495481",
+    "l3_auth": "FACE_EMP4958_3970"
   },
   {
     "user_id": "EMP9875",
     "name": "何芳",
     "role": "经理",
     "auth_level": "L1",
-    "face_id": "FACE_EMP9875_7767"
+    "l3_auth": "FACE_EMP9875_7767"
   },
   {
     "user_id": "EMP9260",
     "name": "陈丽",
     "role": "普通员工",
     "auth_level": "L2",
-    "otp": "323530",
-    "face_id": "FACE_EMP9260_7745"
+    "l2_auth": "323530",
+    "l3_auth": "FACE_EMP9260_7745"
   },
   {
     "user_id": "EMP6330",
     "name": "杨强",
     "role": "经理",
     "auth_level": "L3",
-    "otp": "695084",
-    "face_id": "FACE_EMP6330_9259"
+    "l2_auth": "695084",
+    "l3_auth": "FACE_EMP6330_9259"
   }
 ]
