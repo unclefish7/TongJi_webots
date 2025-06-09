@@ -84,6 +84,8 @@ def allocate_locker(locker_id: str) -> tuple[bool, str]:
     Returns:
         tuple[bool, str]: (是否成功, 错误信息)
     """
+    from services.log_service import log_locker_operation
+    
     lockers = load_lockers()
     
     for locker in lockers:
@@ -92,8 +94,10 @@ def allocate_locker(locker_id: str) -> tuple[bool, str]:
                 locker['status'] = 'in_use'
                 try:
                     save_lockers(lockers)
+                    log_locker_operation(locker_id, "allocated", success=True)
                     return True, ""
                 except Exception as e:
+                    log_locker_operation(locker_id, "allocation failed", success=False)
                     return False, f"Failed to allocate locker: {str(e)}"
             else:
                 return False, f"Locker {locker_id} is not available"
@@ -110,6 +114,8 @@ def release_locker(locker_id: str) -> tuple[bool, str]:
     Returns:
         tuple[bool, str]: (是否成功, 错误信息)
     """
+    from services.log_service import log_locker_operation
+    
     lockers = load_lockers()
     
     for locker in lockers:
@@ -118,8 +124,10 @@ def release_locker(locker_id: str) -> tuple[bool, str]:
                 locker['status'] = 'available'
                 try:
                     save_lockers(lockers)
+                    log_locker_operation(locker_id, "released", success=True)
                     return True, ""
                 except Exception as e:
+                    log_locker_operation(locker_id, "release failed", success=False)
                     return False, f"Failed to release locker: {str(e)}"
             else:
                 return False, f"Locker {locker_id} is not in use"
@@ -196,9 +204,12 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         tuple[bool, str, str, Optional[str], Optional[Dict], Optional[str]]: 
         (是否成功, 错误编码, 消息, 任务ID, 任务详细信息, 柜子ID)
     """
+    from services.log_service import log_task_creation, log_error
+    
     # 验证任务创建条件
     is_valid, error_code, error_msg = validate_task_creation(user_id, receiver, location_id, security_level)
     if not is_valid:
+        log_task_creation("", user_id, receiver, location_id, security_level, "", False, error_code)
         return False, error_code, error_msg, None, None, None
     
     # 事务性操作：认证消费和柜子分配
@@ -210,6 +221,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         # 步骤1：消费认证记录
         auth_consumed = consume_auth(user_id, security_level)
         if not auth_consumed:
+            log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.INSUFFICIENT_AUTH)
             return False, TaskErrorCodes.INSUFFICIENT_AUTH, f"Insufficient authentication for security level {security_level}. Please authenticate first.", None, None, None
         
         # 步骤2：查找并分配可用柜子
@@ -217,6 +229,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         if not available_locker:
             # 如果没有可用柜子，需要回滚认证消费
             rollback_auth_consumption(user_id, security_level)
+            log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.NO_AVAILABLE_LOCKERS)
             return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for task creation. Please try again later.", None, None, None
         
         locker_id = available_locker.get('locker_id')
@@ -226,6 +239,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         if not allocation_success:
             # 如果柜子分配失败，需要回滚认证消费
             rollback_auth_consumption(user_id, security_level)
+            log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED)
             return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
         
         locker_allocated = True
@@ -247,6 +261,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         if not is_valid:
             # 如果验证失败，回滚所有操作
             rollback_transaction(user_id, security_level, locker_id)
+            log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.VALIDATION_FAILED)
             return False, TaskErrorCodes.VALIDATION_FAILED, f"Task data validation failed: {validation_error}", None, None, None
         
         # 步骤4：保存任务到存储文件
@@ -255,9 +270,13 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         except Exception as save_error:
             # 如果保存失败，回滚所有操作
             rollback_transaction(user_id, security_level, locker_id)
+            log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.SAVE_FAILED)
             return False, TaskErrorCodes.SAVE_FAILED, f"Failed to save task: {str(save_error)}", None, None, None
         
         task_id = task_data.get("task_id")
+        
+        # 记录成功的任务创建日志
+        log_task_creation(task_id, user_id, receiver, location_id, security_level, locker_id, True)
         
         # 获取用户和位置信息用于成功消息
         initiator = get_user_by_id(user_id)
@@ -271,6 +290,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
     except Exception as e:
         # 如果发生任何未预期的异常，执行完整回滚
         rollback_transaction(user_id, security_level, locker_id if locker_allocated else None)
+        log_error(f"Unexpected error during task creation: {str(e)}", user_id)
         return False, TaskErrorCodes.SAVE_FAILED, f"Unexpected error during task creation: {str(e)}", None, None, None
 
 def save_task_to_storage(task_data: Dict) -> None:
@@ -348,6 +368,8 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
     Returns:
         tuple[bool, str]: (是否成功, 消息)
     """
+    from services.log_service import log_task_status_change, log_error
+    
     # 验证状态值
     valid_statuses = ["pending", "authenticating", "delivering", "completed", "failed"]
     if new_status not in valid_statuses:
@@ -358,8 +380,10 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
     
     # 查找并更新任务
     task_found = False
+    old_status = ""
     for task in tasks:
         if task.get('task_id') == task_id:
+            old_status = task.get('status', '')
             task['status'] = new_status
             
             # 更新时间戳
@@ -375,8 +399,10 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
     # 保存更新
     try:
         save_tasks(tasks)
+        log_task_status_change(task_id, old_status, new_status)
         return True, f"Task {task_id} status updated to {new_status}"
     except Exception as e:
+        log_error(f"Failed to update task {task_id}: {str(e)}", related_task=task_id)
         return False, f"Failed to update task: {str(e)}"
 
 def get_tasks_by_user(user_id: str, role: str = "all") -> List[Dict]:
@@ -416,6 +442,8 @@ def complete_task(task_id: str) -> tuple[bool, str, str, Optional[Dict]]:
     Returns:
         tuple[bool, str, str, Optional[Dict]]: (是否成功, 错误编码, 消息, 任务信息)
     """
+    from services.log_service import log_locker_operation, log_error
+    
     # 获取任务信息
     task = get_task_by_id(task_id)
     if not task:
@@ -431,7 +459,10 @@ def complete_task(task_id: str) -> tuple[bool, str, str, Optional[Dict]]:
     warning_message = ""
     if locker_id:
         locker_released, locker_message = release_locker(locker_id)
-        if not locker_released:
+        if locker_released:
+            log_locker_operation(locker_id, "released", task_id, True)
+        else:
+            log_locker_operation(locker_id, "release failed", task_id, False)
             warning_message = f" Warning: Failed to release locker {locker_id}: {locker_message}"
     
     # 获取更新后的任务信息
@@ -451,6 +482,8 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
     Returns:
         tuple[bool, str, str, Optional[Dict]]: (是否成功, 错误编码, 消息, 任务信息)
     """
+    from services.log_service import log_locker_operation, log_error
+    
     # 获取任务信息
     task = get_task_by_id(task_id)
     if not task:
@@ -466,7 +499,10 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
     warning_message = ""
     if locker_id:
         locker_released, locker_message = release_locker(locker_id)
-        if not locker_released:
+        if locker_released:
+            log_locker_operation(locker_id, "released", task_id, True)
+        else:
+            log_locker_operation(locker_id, "release failed", task_id, False)
             warning_message = f" Warning: Could not release locker {locker_id}: {locker_message}"
     
     # 获取更新后的任务信息
@@ -475,5 +511,8 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
     failure_message = f"Task {task_id} marked as failed{warning_message}"
     if reason:
         failure_message += f". Reason: {reason}"
+        # 记录失败原因日志
+        from services.log_service import log_error
+        log_error(f"Task {task_id} failed: {reason}", related_task=task_id)
     
     return True, TaskErrorCodes.SUCCESS, failure_message, updated_task

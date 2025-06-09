@@ -38,9 +38,12 @@ def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) ->
     Returns:
         Tuple[bool, str, List[str]]: (是否认证成功, 验证等级, 使用的认证方式)
     """
+    from services.log_service import log_auth_attempt
+    
     # 获取用户信息
     user = get_user_by_id(user_id)
     if not user:
+        log_auth_attempt(user_id, requested_level, ['ID'], False)
         return False, "", []
     
     user_auth_level = user.get('auth_level', '')
@@ -49,6 +52,7 @@ def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) ->
     
     # 检查请求的认证等级是否超过用户本身的等级
     if requested_level_num > user_level_num:
+        log_auth_attempt(user_id, requested_level, ['ID'], False)
         return False, "", []
     
     methods_used = ['ID']  # 基础ID验证
@@ -87,6 +91,9 @@ def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) ->
     else:
         # 未知认证等级
         success, verified_level = False, ''
+    
+    # 记录认证尝试日志
+    log_auth_attempt(user_id, requested_level, methods_used, success, verified_level)
     
     # 如果认证成功，添加到缓存
     if success:
