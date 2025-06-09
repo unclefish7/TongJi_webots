@@ -23,8 +23,11 @@ class TaskCreateRequest(BaseModel):
 
 class TaskCreateResponse(BaseModel):
     success: bool
+    code: str  # 响应编码
+    message: str  # 详细说明
     task_id: Optional[str] = None
-    message: str
+    task: Optional[Dict] = None  # 完整任务信息
+    locker_id: Optional[str] = None  # 分配的柜子ID
 
 class TaskStatusUpdateRequest(BaseModel):
     task_id: str
@@ -33,6 +36,7 @@ class TaskStatusUpdateRequest(BaseModel):
 
 class TaskStatusUpdateResponse(BaseModel):
     success: bool
+    code: str
     message: str
 
 class TaskQueryResponse(BaseModel):
@@ -45,6 +49,26 @@ class Task(BaseModel):
     initiator: str
     receiver: str
     location_id: str
+    locker_id: str  # 添加柜子ID字段
     security_level: str
     status: str
     timestamps: Dict[str, Optional[str]]
+
+class TaskCompleteRequest(BaseModel):
+    task_id: str
+
+class TaskCompleteResponse(BaseModel):
+    success: bool
+    code: str
+    message: str
+    task: Optional[Dict] = None
+
+class TaskFailRequest(BaseModel):
+    task_id: str
+    reason: Optional[str] = None
+
+class TaskFailResponse(BaseModel):
+    success: bool
+    code: str
+    message: str
+    task: Optional[Dict] = None

@@ -1,14 +1,15 @@
 [
   {
-    "task_id": "T20250609150847",
-    "description": "测试task持久化保存",
+    "task_id": "T20250609151915",
+    "description": "测试task持久化保存+柜子分配",
     "initiator": "EMP7064",
     "receiver": "EMP4958",
     "location_id": "LOC101",
+    "locker_id": "LOCK9465",
     "security_level": "L1",
     "status": "pending",
     "timestamps": {
-      "created": "2025-06-09T15:08:47.930909",
+      "created": "2025-06-09T15:19:15.295512",
       "accepted": null,
       "delivered": null
     }

@@ -1,7 +1,11 @@
 # api/task_api.py
 from fastapi import APIRouter, HTTPException
-from services.task_service import create_task
-from models import PingResponse, TaskCreateRequest, TaskCreateResponse
+from services.task_service import create_task, complete_task, fail_task, TaskErrorCodes
+from models import (
+    PingResponse, TaskCreateRequest, TaskCreateResponse,
+    TaskCompleteRequest, TaskCompleteResponse,
+    TaskFailRequest, TaskFailResponse
+)
 
 router = APIRouter(tags=["tasks"])
 
@@ -20,10 +24,20 @@ async def create_task_endpoint(request: TaskCreateRequest):
     - **security_level**: 任务安全等级 (L1/L2/L3)
     - **description**: 任务描述（可选）
     
-    注意：创建任务前会消费一次认证记录，每个认证记录只能使用一次
+    返回编码说明：
+    - TASK_000: 成功
+    - TASK_001: 发起人不存在
+    - TASK_002: 接收人不存在
+    - TASK_003: 目标位置不存在
+    - TASK_004: 安全等级无效
+    - TASK_005: 认证不足
+    - TASK_006: 无可用柜子
+    - TASK_007: 柜子分配失败
+    - TASK_008: 数据验证失败
+    - TASK_009: 保存失败
     """
     try:
-        success, message, task_id = create_task(
+        success, code, message, task_id, task_data, locker_id = create_task(
             user_id=request.user_id,
             receiver=request.receiver,
             location_id=request.location_id,
@@ -32,25 +46,36 @@ async def create_task_endpoint(request: TaskCreateRequest):
         )
         
         if not success:
-            # 根据错误信息确定HTTP状态码
-            if "not found" in message:
-                status_code = 404
-            elif "Insufficient authentication" in message:
-                status_code = 403
-            elif "Invalid" in message:
-                status_code = 400
-            else:
-                status_code = 400
+            # 根据错误编码确定HTTP状态码
+            status_code_map = {
+                TaskErrorCodes.INITIATOR_NOT_FOUND: 404,
+                TaskErrorCodes.RECEIVER_NOT_FOUND: 404,
+                TaskErrorCodes.LOCATION_NOT_FOUND: 404,
+                TaskErrorCodes.INVALID_SECURITY_LEVEL: 400,
+                TaskErrorCodes.INSUFFICIENT_AUTH: 403,
+                TaskErrorCodes.NO_AVAILABLE_LOCKERS: 503,
+                TaskErrorCodes.LOCKER_ALLOCATION_FAILED: 500,
+                TaskErrorCodes.VALIDATION_FAILED: 400,
+                TaskErrorCodes.SAVE_FAILED: 500
+            }
+            
+            status_code = status_code_map.get(code, 400)
             
             raise HTTPException(
                 status_code=status_code,
-                detail=message
+                detail={
+                    "code": code,
+                    "message": message
+                }
             )
         
         return TaskCreateResponse(
             success=True,
+            code=code,
+            message=message,
             task_id=task_id,
-            message=message
+            task=task_data,
+            locker_id=locker_id
         )
     
     except HTTPException:
@@ -60,5 +85,85 @@ async def create_task_endpoint(request: TaskCreateRequest):
         # 处理其他异常
         raise HTTPException(
             status_code=500,
-            detail=f"Task creation error: {str(e)}"
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
+        )
+
+@router.post("/complete", response_model=TaskCompleteResponse)
+async def complete_task_endpoint(request: TaskCompleteRequest):
+    """
+    完成任务
+    
+    - **task_id**: 任务ID
+    """
+    try:
+        success, code, message, task_data = complete_task(request.task_id)
+        
+        if not success:
+            status_code = 404 if code == TaskErrorCodes.TASK_NOT_FOUND else 500
+            raise HTTPException(
+                status_code=status_code,
+                detail={
+                    "code": code,
+                    "message": message
+                }
+            )
+        
+        return TaskCompleteResponse(
+            success=True,
+            code=code,
+            message=message,
+            task=task_data
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
+        )
+
+@router.post("/fail", response_model=TaskFailResponse)
+async def fail_task_endpoint(request: TaskFailRequest):
+    """
+    标记任务失败
+    
+    - **task_id**: 任务ID
+    - **reason**: 失败原因（可选）
+    """
+    try:
+        success, code, message, task_data = fail_task(request.task_id, request.reason)
+        
+        if not success:
+            status_code = 404 if code == TaskErrorCodes.TASK_NOT_FOUND else 500
+            raise HTTPException(
+                status_code=status_code,
+                detail={
+                    "code": code,
+                    "message": message
+                }
+            )
+        
+        return TaskFailResponse(
+            success=True,
+            code=code,
+            message=message,
+            task=task_data
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
         )

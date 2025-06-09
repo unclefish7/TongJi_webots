@@ -68,6 +68,12 @@
 			"ref": "Location.location_id",
 			"description": "目标位置（引用位置表）"
 		},
+		"locker_id": {
+			"type": "string",
+			"required": true,
+			"ref": "Locker.locker_id",
+			"description": "分配的柜子ID"
+		},
 		"security_level": {
 			"type": "enum",
 			"values": ["L1", "L2", "L3"],
