@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 class PingResponse(BaseModel):
     message: str
@@ -72,3 +72,16 @@ class TaskFailResponse(BaseModel):
     code: str
     message: str
     task: Optional[Dict] = None
+
+class PurposeAuthRequest(BaseModel):
+    user_id: str
+    purpose: Literal["send", "pickup"]  # 本次认证的用途
+    requested_level: Literal["L1", "L2", "L3"]
+    provided: Dict[str, str]  # 提供的认证信息，如 l2_auth, l3_auth
+
+class PurposeAuthResponse(BaseModel):
+    verified: bool
+    verified_level: Optional[str] = None
+    methods: Optional[List[str]] = None
+    expires_at: Optional[str] = None  # 仅在 purpose=pickup 时返回
+    message: Optional[str] = None
