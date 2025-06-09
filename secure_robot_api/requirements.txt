@@ -5,3 +5,6 @@ uvicorn[standard]
 pydantic
 python-dateutil
 typing-extensions
+pytest 
+httpx 
+pytest-asyncio
