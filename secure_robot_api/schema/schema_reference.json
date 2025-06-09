@@ -45,6 +45,11 @@
 			"format": "T{yyyyMMddHHmmss}",
 			"description": "任务唯一编号"
 		},
+		"description": {
+			"type": "string",
+			"required": false,
+			"description": "任务附带的包裹内容说明，避免包含敏感信息"
+		},
 		"initiator": {
 			"type": "string",
 			"required": true,
