@@ -1,7 +1,11 @@
 import pytest
 import json
 import os
-from httpx import AsyncClient
+import sys
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from fastapi.testclient import TestClient
 from main import app
 

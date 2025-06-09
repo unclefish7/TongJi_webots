@@ -1,7 +1,11 @@
 import pytest
 import json
 import os
+import sys
 from typing import Generator
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 @pytest.fixture(autouse=True)
 def reset_test_data() -> Generator[None, None, None]:

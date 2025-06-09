@@ -273,6 +273,22 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         rollback_transaction(user_id, security_level, locker_id if locker_allocated else None)
         return False, TaskErrorCodes.SAVE_FAILED, f"Unexpected error during task creation: {str(e)}", None, None, None
 
+def save_task_to_storage(task_data: Dict) -> None:
+    """
+    保存任务到存储文件
+    
+    Args:
+        task_data: 任务数据
+    """
+    # 加载现有任务
+    tasks = load_tasks()
+    
+    # 添加新任务
+    tasks.append(task_data)
+    
+    # 保存回文件
+    save_tasks(tasks)
+
 def rollback_auth_consumption(user_id: str, security_level: str) -> None:
     """
     回滚认证记录消费
