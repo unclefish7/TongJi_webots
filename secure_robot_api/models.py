@@ -25,3 +25,26 @@ class TaskCreateResponse(BaseModel):
     success: bool
     task_id: Optional[str] = None
     message: str
+
+class TaskStatusUpdateRequest(BaseModel):
+    task_id: str
+    new_status: str
+    timestamp_field: Optional[str] = None  # accepted/delivered
+
+class TaskStatusUpdateResponse(BaseModel):
+    success: bool
+    message: str
+
+class TaskQueryResponse(BaseModel):
+    tasks: List[Dict]
+    total: int
+
+class Task(BaseModel):
+    task_id: str
+    description: Optional[str]
+    initiator: str
+    receiver: str
+    location_id: str
+    security_level: str
+    status: str
+    timestamps: Dict[str, Optional[str]]

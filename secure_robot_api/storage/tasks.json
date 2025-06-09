@@ -1,0 +1,16 @@
+[
+  {
+    "task_id": "T20250609150847",
+    "description": "测试task持久化保存",
+    "initiator": "EMP7064",
+    "receiver": "EMP4958",
+    "location_id": "LOC101",
+    "security_level": "L1",
+    "status": "pending",
+    "timestamps": {
+      "created": "2025-06-09T15:08:47.930909",
+      "accepted": null,
+      "delivered": null
+    }
+  }
+]
