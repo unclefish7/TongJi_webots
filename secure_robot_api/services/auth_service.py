@@ -1,19 +1,13 @@
 import json
 import os
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # 认证等级顺序
 LEVEL_ORDER = {"L1": 1, "L2": 2, "L3": 3}
 
 # 运行时认证缓存 - 修改为列表结构支持多认证记录
 auth_session_cache: Dict[str, List[Dict]] = {}
-
-# 取件认证缓存 - 5分钟有效期，可重复使用
-pickup_auth_cache: Dict[str, Dict] = {}
-
-# 取件认证有效期（分钟）
-PICKUP_AUTH_EXPIRY_MINUTES = 5
 
 def load_users() -> List[Dict]:
     """从 users.json 加载用户数据"""
@@ -32,18 +26,17 @@ def get_user_by_id(user_id: str) -> Optional[Dict]:
             return user
     return None
 
-def verify_auth_with_purpose(user_id: str, requested_level: str, provided: Dict[str, str], purpose: str) -> Tuple[bool, str, List[str], Optional[str]]:
+def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) -> Tuple[bool, str, List[str]]:
     """
-    验证用户认证 - 基于请求的认证等级和用途进行验证
+    验证用户认证 - 基于请求的认证等级进行验证
     
     Args:
         user_id: 用户ID（员工卡号）
         requested_level: 请求的认证等级 (L1/L2/L3)
         provided: 提供的认证信息，可能包含 l2_auth、l3_auth
-        purpose: 认证用途 ("send" 或 "pickup")
     
     Returns:
-        Tuple[bool, str, List[str], Optional[str]]: (是否认证成功, 验证等级, 使用的认证方式, 过期时间)
+        Tuple[bool, str, List[str]]: (是否认证成功, 验证等级, 使用的认证方式)
     """
     from services.log_service import log_auth_attempt
     
@@ -51,7 +44,7 @@ def verify_auth_with_purpose(user_id: str, requested_level: str, provided: Dict[
     user = get_user_by_id(user_id)
     if not user:
         log_auth_attempt(user_id, requested_level, ['ID'], False)
-        return False, "", [], None
+        return False, "", []
     
     user_auth_level = user.get('auth_level', '')
     requested_level_num = LEVEL_ORDER.get(requested_level, 0)
@@ -60,7 +53,7 @@ def verify_auth_with_purpose(user_id: str, requested_level: str, provided: Dict[
     # 检查请求的认证等级是否超过用户本身的等级
     if requested_level_num > user_level_num:
         log_auth_attempt(user_id, requested_level, ['ID'], False)
-        return False, "", [], None
+        return False, "", []
     
     methods_used = ['ID']  # 基础ID验证
     
@@ -102,22 +95,10 @@ def verify_auth_with_purpose(user_id: str, requested_level: str, provided: Dict[
     # 记录认证尝试日志
     log_auth_attempt(user_id, requested_level, methods_used, success, verified_level)
     
-    expires_at = None
-    
-    # 如果认证成功，根据用途添加到不同的缓存
+    # 如果认证成功，添加到缓存
     if success:
-        if purpose == "send":
-            add_auth_record(user_id, verified_level, methods_used)
-        elif purpose == "pickup":
-            expires_at = add_pickup_auth_record(user_id, verified_level, methods_used)
+        add_auth_record(user_id, verified_level, methods_used)
     
-    return success, verified_level, methods_used, expires_at
-
-def verify_auth(user_id: str, requested_level: str, provided: Dict[str, str]) -> Tuple[bool, str, List[str]]:
-    """
-    验证用户认证 - 基于请求的认证等级进行验证（保持向后兼容）
-    """
-    success, verified_level, methods_used, _ = verify_auth_with_purpose(user_id, requested_level, provided, "send")
     return success, verified_level, methods_used
 
 def add_auth_record(user_id: str, level: str, methods: List[str]) -> None:
@@ -133,29 +114,6 @@ def add_auth_record(user_id: str, level: str, methods: List[str]) -> None:
     }
     
     auth_session_cache[user_id].append(auth_record)
-
-def add_pickup_auth_record(user_id: str, level: str, methods: List[str]) -> str:
-    """
-    添加取件认证记录到pickup缓存
-    
-    Args:
-        user_id: 用户ID
-        level: 认证等级
-        methods: 认证方式
-    
-    Returns:
-        str: 过期时间（ISO格式）
-    """
-    expires_at = datetime.now() + timedelta(minutes=PICKUP_AUTH_EXPIRY_MINUTES)
-    
-    pickup_auth_cache[user_id] = {
-        "level": level,
-        "methods": methods,
-        "timestamp": datetime.now().isoformat(),
-        "expires_at": expires_at.isoformat()
-    }
-    
-    return expires_at.isoformat()
 
 def consume_auth(user_id: str, required_level: str) -> bool:
     """
@@ -221,49 +179,6 @@ def rollback_auth_consumption(user_id: str, security_level: str) -> bool:
     
     return False
 
-def is_pickup_auth_valid(user_id: str, required_level: str) -> bool:
-    """
-    检查用户的取件认证是否有效
-    
-    Args:
-        user_id: 用户ID
-        required_level: 所需认证等级
-    
-    Returns:
-        bool: 是否有有效的取件认证
-    """
-    if user_id not in pickup_auth_cache:
-        return False
-    
-    auth_record = pickup_auth_cache[user_id]
-    
-    # 检查是否过期
-    expires_at = datetime.fromisoformat(auth_record["expires_at"])
-    if datetime.now() > expires_at:
-        # 过期，清除记录
-        del pickup_auth_cache[user_id]
-        return False
-    
-    # 检查认证等级是否满足要求
-    auth_level = auth_record["level"]
-    required_level_num = LEVEL_ORDER.get(required_level, 0)
-    auth_level_num = LEVEL_ORDER.get(auth_level, 0)
-    
-    return auth_level_num >= required_level_num
-
-def clean_expired_pickup_auth() -> None:
-    """清理过期的取件认证记录"""
-    current_time = datetime.now()
-    expired_users = []
-    
-    for user_id, auth_record in pickup_auth_cache.items():
-        expires_at = datetime.fromisoformat(auth_record["expires_at"])
-        if current_time > expires_at:
-            expired_users.append(user_id)
-    
-    for user_id in expired_users:
-        del pickup_auth_cache[user_id]
-
 def get_auth_records(user_id: str) -> List[Dict]:
     """获取用户的所有认证记录"""
     return auth_session_cache.get(user_id, [])
@@ -310,27 +225,3 @@ def get_auth_session_status(user_id: str) -> Dict[str, any]:
         "used_records": used_count,
         "records": records
     }
-
-def get_pickup_auth_status(user_id: str) -> Optional[Dict]:
-    """
-    获取用户的取件认证状态
-    
-    Args:
-        user_id: 用户ID
-    
-    Returns:
-        Dict: 取件认证状态信息，如果无效或过期则返回None
-    """
-    if user_id not in pickup_auth_cache:
-        return None
-    
-    auth_record = pickup_auth_cache[user_id]
-    
-    # 检查是否过期
-    expires_at = datetime.fromisoformat(auth_record["expires_at"])
-    if datetime.now() > expires_at:
-        # 过期，清除记录
-        del pickup_auth_cache[user_id]
-        return None
-    
-    return auth_record
