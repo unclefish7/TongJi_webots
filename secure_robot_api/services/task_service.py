@@ -1,5 +1,7 @@
 import json
 import os
+import random
+import string
 from typing import Dict, List, Optional
 from datetime import datetime
 from services.auth_service import consume_auth, get_user_by_id
@@ -135,9 +137,10 @@ def release_locker(locker_id: str) -> tuple[bool, str]:
     return False, f"Locker {locker_id} not found"
 
 def generate_task_id() -> str:
-    """生成任务ID"""
+    """生成任务ID：时间戳+随机码"""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    return f"T{timestamp}"
+    random_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return f"T{timestamp}{random_chars}"
 
 # 定义错误编码
 class TaskErrorCodes:

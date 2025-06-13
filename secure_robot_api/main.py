@@ -2,10 +2,12 @@
 from fastapi import FastAPI
 from api.task_api import router as task_router
 from api.auth_api import router as auth_router
+from api.pickup_api import router as pickup_router
 
 app = FastAPI(title="Secure Robot API")
 app.include_router(task_router, prefix="/api/task")
 app.include_router(auth_router, prefix="/api/auth")
+app.include_router(pickup_router, prefix="/api/pickup")
 
 if __name__ == "__main__":
     import uvicorn

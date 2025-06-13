@@ -1,5 +1,7 @@
 import json
 import os
+import random
+import string
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -32,10 +34,16 @@ def generate_field_value(field_name: str, field_config: Dict[str, Any], provided
     # 生成器字段
     if 'generator' in field_config:
         generator = field_config.get('generator')
-        if generator == 'timestamp+prefix':
+        if generator == "timestamp+prefix":
             prefix = field_config.get('prefix', '')
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             return f"{prefix}{timestamp}"
+        elif generator == "timestamp+random+prefix":
+            prefix = field_config.get('prefix', '')
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            random_length = field_config.get('random_length', 6)
+            random_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=random_length))
+            return f"{prefix}{timestamp}{random_chars}"
     
     # 对象类型字段
     if field_type == 'object':

@@ -40,9 +40,10 @@
 			"type": "string",
 			"required": true,
 			"primary_key": true,
-			"generator": "timestamp+prefix",
+			"generator": "timestamp+random+prefix",
 			"prefix": "T",
-			"format": "T{yyyyMMddHHmmss}",
+			"random_length": 6,
+			"format": "T{yyyyMMddHHmmss}{random}",
 			"description": "任务唯一编号"
 		},
 		"description": {
@@ -82,7 +83,7 @@
 		},
 		"status": {
 			"type": "enum",
-			"values": ["pending", "authenticating", "delivering", "completed", "failed"],
+			"values": ["pending", "authenticating", "delivering", "arrived", "completed", "failed"],
 			"required": true,
 			"description": "任务状态"
 		},
@@ -103,9 +104,10 @@
 			"type": "string",
 			"required": true,
 			"primary_key": true,
-			"generator": "timestamp+prefix",
+			"generator": "timestamp+random+prefix",
 			"prefix": "LOG",
-			"format": "LOG{yyyyMMddHHmmss}",
+			"random_length": 6,
+			"format": "LOG{yyyyMMddHHmmss}{random}",
 			"description": "日志唯一编号"
 		},
 		"log_type": {

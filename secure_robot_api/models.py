@@ -85,3 +85,20 @@ class PurposeAuthResponse(BaseModel):
     methods: Optional[List[str]] = None
     expires_at: Optional[str] = None  # 仅在 purpose=pickup 时返回
     message: Optional[str] = None
+
+class PickupTasksResponse(BaseModel):
+    success: bool
+    user_id: str
+    total_tasks: int
+    tasks: List[Dict]
+    auth_status: Optional[Dict] = None
+
+class PickupExecuteRequest(BaseModel):
+    user_id: str
+    task_id: str
+
+class PickupExecuteResponse(BaseModel):
+    success: bool
+    code: str
+    message: str
+    task_id: Optional[str] = None

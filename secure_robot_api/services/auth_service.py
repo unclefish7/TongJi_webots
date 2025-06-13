@@ -338,7 +338,7 @@ def add_send_auth_record(user_id: str, verified_level: str, methods: List[str]) 
         auth_session_cache[user_id] = []
     
     auth_record = {
-        "verified_level": verified_level,
+        "level": verified_level,  # 改回原来的字段名，保持与consume_auth一致
         "methods": methods,
         "timestamp": datetime.now().isoformat(),
         "used": False
