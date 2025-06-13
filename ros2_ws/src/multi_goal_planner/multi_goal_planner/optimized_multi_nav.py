@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionClient
+from std_msgs.msg import String
+from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import PoseStamped
+import json
+import os
+import math
+import itertools
+import tf2_ros
+from tf2_ros import TransformException
+from ament_index_python.packages import get_package_share_directory
+
+
+class OptimizedMultiNav(Node):
+    def __init__(self):
+        super().__init__('optimized_multi_nav')
+        
+        # 创建订阅者
+        self.subscription = self.create_subscription(
+            String,
+            '/multi_nav_command',
+            self.command_callback,
+            10
+        )
+        
+        # 创建 TF 缓冲区和监听器
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
+        # 创建导航动作客户端
+        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        
+        # 加载地图数据
+        self.load_map_data()
+        
+        # 当前导航状态
+        self.current_goals = []
+        self.current_goal_index = 0
+        self.is_navigating = False
+        
+        self.get_logger().info('Optimized Multi Navigation node initialized')
+        self.get_logger().info('Using TF to get current robot position')
+
+    def get_current_position(self):
+        """使用TF获取机器人当前位置"""
+        try:
+            # 查询从 map 到 base_link 的变换
+            transform = self.tf_buffer.lookup_transform(
+                'map',
+                'base_link',
+                rclpy.time.Time()
+            )
+            
+            current_position = {
+                'x': transform.transform.translation.x,
+                'y': transform.transform.translation.y
+            }
+            
+            return current_position
+            
+        except TransformException as e:
+            self.get_logger().warn(f'Failed to get current position: {e}')
+            return None
+
+    def load_map_data(self):
+        """从 JSON 文件加载地图数据"""
+        try:
+            package_share_directory = get_package_share_directory('multi_goal_planner')
+            map_file_path = os.path.join(package_share_directory, 'map', 'map.json')
+            
+            with open(map_file_path, 'r', encoding='utf-8') as f:
+                self.map_data = json.load(f)
+            
+            self.get_logger().info(f'Loaded {len(self.map_data)} locations from map.json')
+            for location in self.map_data.keys():
+                self.get_logger().info(f'  - {location}')
+                
+        except Exception as e:
+            self.get_logger().error(f'Failed to load map data: {str(e)}')
+            self.map_data = {}
+
+    def optimize_path(self, goal_names):
+        """使用TSP算法优化路径，以当前位置为起点"""
+        if len(goal_names) <= 1:
+            return goal_names
+        
+        # 获取当前位置
+        current_position = self.get_current_position()
+        if current_position is None:
+            self.get_logger().warn('Current position not available, using original order')
+            return goal_names
+        
+        # 构建距离矩阵：包含当前位置(索引0)和所有目标点
+        n = len(goal_names) + 1  # +1 for current position
+        distance_matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+        
+        # 计算当前位置到所有目标点的距离
+        for i in range(1, n):  # 从1开始，0是当前位置
+            goal_name = goal_names[i-1]
+            distance_matrix[0][i] = self.calculate_distance_from_position(current_position, goal_name)
+            distance_matrix[i][0] = distance_matrix[0][i]  # 对称距离
+        
+        # 计算目标点之间的距离
+        for i in range(1, n):
+            for j in range(1, n):
+                if i != j:
+                    distance_matrix[i][j] = self.calculate_distance(goal_names[i-1], goal_names[j-1])
+        
+        # 求解TSP，固定起点为当前位置(索引0)
+        best_path = self.solve_tsp_with_fixed_start(goal_names, distance_matrix)
+        
+        return best_path
+
+    def calculate_distance_from_position(self, position, location_name):
+        """计算给定位置到地图中某个点的距离"""
+        target_pos = self.map_data[location_name]['pose']['position']
+        
+        dx = position['x'] - target_pos['x']
+        dy = position['y'] - target_pos['y']
+        
+        return math.sqrt(dx * dx + dy * dy)
+
+    def calculate_distance(self, location1, location2):
+        """计算两个位置之间的欧氏距离"""
+        pos1 = self.map_data[location1]['pose']['position']
+        pos2 = self.map_data[location2]['pose']['position']
+        
+        dx = pos1['x'] - pos2['x']
+        dy = pos1['y'] - pos2['y']
+        
+        return math.sqrt(dx * dx + dy * dy)
+
+    def solve_tsp_with_fixed_start(self, goal_names, distance_matrix):
+        """固定起点的TSP求解"""
+        n = len(goal_names)
+        
+        if n <= 7:  # 限制在7个目标点以内使用暴力法（加上起点共8个点）
+            return self.solve_tsp_brute_force_fixed_start(goal_names, distance_matrix)
+        else:
+            return self.solve_tsp_nearest_neighbor_fixed_start(goal_names, distance_matrix)
+
+    def solve_tsp_brute_force_fixed_start(self, goal_names, distance_matrix):
+        """暴力求解TSP，固定起点为当前位置"""
+        n = len(goal_names)
+        min_distance = float('inf')
+        best_path = goal_names[:]
+        
+        # 生成目标点的所有排列（不包括起点）
+        goal_indices = list(range(1, n + 1))  # 1到n，对应goal_names的索引
+        
+        for perm in itertools.permutations(goal_indices):
+            total_distance = 0.0
+            
+            # 从当前位置(索引0)到第一个目标点
+            total_distance += distance_matrix[0][perm[0]]
+            
+            # 目标点之间的距离
+            for i in range(len(perm) - 1):
+                total_distance += distance_matrix[perm[i]][perm[i + 1]]
+            
+            if total_distance < min_distance:
+                min_distance = total_distance
+                best_path = [goal_names[i - 1] for i in perm]  # 转换回goal_names索引
+        
+        self.get_logger().info(f'TSP solution (from current position) distance: {min_distance:.2f}m')
+        return best_path
+
+    def solve_tsp_nearest_neighbor_fixed_start(self, goal_names, distance_matrix):
+        """最近邻启发式求解TSP，固定起点为当前位置"""
+        n = len(goal_names)
+        unvisited = set(range(1, n + 1))  # 目标点索引：1到n
+        current = 0  # 从当前位置开始
+        path = []
+        total_distance = 0.0
+        
+        while unvisited:
+            nearest = min(unvisited, key=lambda x: distance_matrix[current][x])
+            total_distance += distance_matrix[current][nearest]
+            current = nearest
+            path.append(current)
+            unvisited.remove(current)
+        
+        result = [goal_names[i - 1] for i in path]  # 转换回goal_names索引
+        self.get_logger().info(f'Nearest neighbor solution (from current position) distance: {total_distance:.2f}m')
+        return result
+
+    def command_callback(self, msg):
+        """处理多目标导航命令"""
+        try:
+            goal_names = json.loads(msg.data)
+            
+            if not isinstance(goal_names, list):
+                self.get_logger().error('Command must be a JSON list of location names')
+                return
+            
+            if len(goal_names) == 0:
+                self.get_logger().warn('Received empty goal list')
+                return
+            
+            # 检查是否能获取当前位置
+            current_position = self.get_current_position()
+            if current_position is None:
+                self.get_logger().warn('Current position not available yet, please wait...')
+                return
+            
+            self.get_logger().info(f'Received navigation command: {goal_names}')
+            self.get_logger().info(f'Current position: x={current_position["x"]:.2f}, y={current_position["y"]:.2f}')
+            
+            # 验证所有目标点是否存在
+            valid_goals = []
+            for goal_name in goal_names:
+                if goal_name in self.map_data:
+                    valid_goals.append(goal_name)
+                else:
+                    self.get_logger().warn(f'Unknown location: {goal_name}')
+            
+            if len(valid_goals) == 0:
+                self.get_logger().error('No valid goals found')
+                return
+            
+            # 如果正在导航，停止当前导航
+            if self.is_navigating:
+                self.get_logger().info('Canceling current navigation')
+                self.nav_client.cancel_all_goals()
+            
+            # 计算最优路径（以当前位置为起点）
+            optimized_goals = self.optimize_path(valid_goals)
+            self.get_logger().info(f'Optimized path from current position: {optimized_goals}')
+            
+            # 开始导航
+            self.current_goals = optimized_goals
+            self.current_goal_index = 0
+            self.navigate_to_next_goal()
+            
+        except json.JSONDecodeError:
+            self.get_logger().error('Invalid JSON format in command')
+        except Exception as e:
+            self.get_logger().error(f'Error processing command: {str(e)}')
+
+    def navigate_to_next_goal(self):
+        """导航到下一个目标点"""
+        if self.current_goal_index >= len(self.current_goals):
+            self.get_logger().info('All goals completed!')
+            self.is_navigating = False
+            return
+        
+        goal_name = self.current_goals[self.current_goal_index]
+        
+        if goal_name not in self.map_data:
+            self.get_logger().error(f'Goal {goal_name} not found in map data')
+            self.current_goal_index += 1
+            self.navigate_to_next_goal()
+            return
+        
+        # 等待导航服务可用
+        if not self.nav_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error('Navigation server not available')
+            return
+        
+        # 创建导航目标
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose = self.create_pose_stamped(goal_name)
+        
+        self.get_logger().info(f'Navigating to goal {self.current_goal_index + 1}/{len(self.current_goals)}: {goal_name}')
+        
+        # 发送导航目标
+        self.is_navigating = True
+        future = self.nav_client.send_goal_async(goal_msg)
+        future.add_done_callback(self.navigation_response_callback)
+
+    def create_pose_stamped(self, location_name):
+        """从地图数据创建 PoseStamped 消息"""
+        pose_stamped = PoseStamped()
+        pose_stamped.header.frame_id = 'map'
+        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        
+        location_data = self.map_data[location_name]['pose']
+        
+        # 设置位置
+        pose_stamped.pose.position.x = location_data['position']['x']
+        pose_stamped.pose.position.y = location_data['position']['y']
+        pose_stamped.pose.position.z = location_data['position']['z']
+        
+        # 设置方向
+        pose_stamped.pose.orientation.x = location_data['orientation']['x']
+        pose_stamped.pose.orientation.y = location_data['orientation']['y']
+        pose_stamped.pose.orientation.z = location_data['orientation']['z']
+        pose_stamped.pose.orientation.w = location_data['orientation']['w']
+        
+        return pose_stamped
+
+    def navigation_response_callback(self, future):
+        """处理导航响应"""
+        goal_handle = future.result()
+        
+        if not goal_handle.accepted:
+            self.get_logger().error('Navigation goal rejected')
+            self.is_navigating = False
+            return
+        
+        self.get_logger().info('Navigation goal accepted')
+        
+        # 等待结果
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.navigation_result_callback)
+
+    def navigation_result_callback(self, future):
+        """处理导航结果"""
+        result = future.result().result
+        
+        goal_name = self.current_goals[self.current_goal_index]
+        
+        if result:
+            self.get_logger().info(f'Successfully reached: {goal_name}')
+        else:
+            self.get_logger().warn(f'Failed to reach: {goal_name}')
+        
+        # 继续下一个目标
+        self.current_goal_index += 1
+        self.navigate_to_next_goal()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    
+    try:
+        node = OptimizedMultiNav()
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if 'node' in locals():
+            node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
