@@ -24,36 +24,6 @@ def generate_launch_description():
         ros2_supervisor=True
     )
 
-    # keyboard_teleop_node = Node(
-    #     package='teleop_twist_keyboard',
-    #     executable='teleop_twist_keyboard',
-    #     name='keyboard_teleop',
-    #     output='screen',
-    #     prefix='xterm -e',
-    # )
-
-    # map_to_odom_publisher = Node(
-    #     package='tf2_ros',
-    #     executable='static_transform_publisher',
-    #     output='screen',
-    #     arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
-    # )
-
-    # velodyne_tf_publisher = Node(
-    #     package='tf2_ros',
-    #     executable='static_transform_publisher',
-    #     output='screen',
-    #     arguments=['--use-timestamp', '0', '0', '0.25', '0', '0', '0', 'base_link', 'velodyne_link']
-    # )
-
-    # 添加LDS-01激光雷达帧的TF变换
-    # lds_tf_publisher = Node(
-    #     package='tf2_ros',
-    #     executable='static_transform_publisher',
-    #     output='screen',
-    #     arguments=['0', '0', '0.18', '0', '0', '0', 'base_link', 'LDS-01']
-    # )
-
     robot_description_path = os.path.join(package_dir, 'resource', 'TurtleBot3Burger.urdf')
     with open(robot_description_path, 'r') as f:
         robot_description = f.read()
@@ -69,12 +39,6 @@ def generate_launch_description():
         }],
     )
 
-    # footprint_publisher = Node(
-    #     package='tf2_ros',
-    #     executable='static_transform_publisher',
-    #     output='screen',
-    #     arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'base_footprint'],
-    # )
 
     controller_manager_timeout = ['--controller-manager-timeout', '50']
     controller_manager_prefix = 'python.exe' if os.name == 'nt' else ''
@@ -106,7 +70,7 @@ def generate_launch_description():
         parameters=[
             {'robot_description': robot_description_path,
              'use_sim_time': use_sim_time,
-             'set_robot_state_publisher': True},
+             'set_robot_state_publisher': False},
             ros2_control_params
         ],
         remappings=mappings,
@@ -118,7 +82,12 @@ def generate_launch_description():
         nodes_to_start=ros_control_spawners
     )
 
-    # ⏱ 延迟启动 Webots 控制器和控制器 spawner，确保 TF 提前发布
+    # ⏱ 延迟启动节点
+    delayed_robot_state_publisher = TimerAction(
+        period=2.0,  # 延迟2秒启动robot_state_publisher
+        actions=[robot_state_publisher]
+    )
+    
     delayed_turtlebot_driver = TimerAction(
         period=5.0,  # 增加延迟时间到5秒
         actions=[turtlebot_driver]
@@ -127,10 +96,6 @@ def generate_launch_description():
         period=6.0,  # 增加延迟时间到6秒
         actions=[waiting_nodes]
     )
-    # delayed_keyboard_teleop = TimerAction(
-    #     period=7.0,  # 增加延迟时间到7秒
-    #     actions=[keyboard_teleop_node]
-    # )
 
     return LaunchDescription([
         DeclareLaunchArgument('world', default_value='office_simple.wbt'),
@@ -139,18 +104,11 @@ def generate_launch_description():
 
         webots,
         webots._supervisor,
-
-        # 🚀 优先发布静态 TF（避免 message filter 报错）
-        robot_state_publisher,
-        # footprint_publisher,
-        # velodyne_tf_publisher,
-        # lds_tf_publisher,  # 添加LDS-01激光雷达TF
-        # map_to_odom_publisher,
-
-        # ⏱ 延迟发布雷达 scan（来自驱动器）
+        
+        # ⏱ 延迟启动其他节点
+        delayed_robot_state_publisher,  # 延迟启动robot_state_publisher
         delayed_turtlebot_driver,
         delayed_waiting_nodes,
-        # delayed_keyboard_teleop,
 
         # Webots 退出时自动关闭 ROS
         launch.actions.RegisterEventHandler(
