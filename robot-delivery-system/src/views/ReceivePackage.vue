@@ -219,7 +219,12 @@
     </div>
 
     <!-- 身份认证弹窗 -->
-    <AuthenticationModal v-model="showAuthModal" @auth-success="handleAuthSuccess" />
+    <UserAuthModal
+      v-model="showAuthModal"
+      purpose="pickup"
+      required-level="L1"
+      @auth-success="handleAuthSuccess"
+    />
 
     <!-- 取件成功对话框 -->
     <el-dialog
@@ -293,7 +298,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
-import AuthenticationModal from '@/components/AuthenticationModal.vue'
+import { authService } from '@/services/authService'
+import { taskService } from '@/services/taskService'
+import { robotService } from '@/services/robotService'
+import UserAuthModal from '@/components/UserAuthModal.vue'
 import {
   Lock,
   Box,
@@ -322,41 +330,20 @@ const openingCompartmentId = ref('')
 const successCompartment = ref('')
 const authTime = ref('')
 
-// 模拟用户包裹数据
-const userPackages = ref([
-  {
-    id: 'c2',
-    floor: 1,
-    compartmentNumber: 2,
-    securityLevel: 'L2',
-    content: '文件包裹',
-    sender: '张三',
-    arrivalTime: '2024-12-20 14:30',
-    timeline: [
-      { timestamp: '2024-12-20 09:00', content: '包裹已寄出', type: 'primary' },
-      { timestamp: '2024-12-20 12:00', content: '包裹运输中', type: 'primary' },
-      { timestamp: '2024-12-20 14:30', content: '包裹已到达', type: 'success' },
-    ],
-  },
-  {
-    id: 'c4',
-    floor: 2,
-    compartmentNumber: 1,
-    securityLevel: 'L1',
-    content: '普通包裹',
-    sender: '李四',
-    arrivalTime: '2024-12-20 16:15',
-    timeline: [
-      { timestamp: '2024-12-20 10:30', content: '包裹已寄出', type: 'primary' },
-      { timestamp: '2024-12-20 14:00', content: '包裹运输中', type: 'primary' },
-      { timestamp: '2024-12-20 16:15', content: '包裹已到达', type: 'success' },
-    ],
-  },
-])
+// 模拟用户包裹数据（这将从后端API获取）
+const userPackages = ref<any[]>([])
 
 // 计算属性
-const isAuthenticated = computed(() => robotStore.userAuthLevel !== null)
-const userAuthLevel = computed(() => robotStore.userAuthLevel)
+const isAuthenticated = computed(() => authService.isAuthenticated())
+const userAuthLevel = computed(() => authService.getCurrentUser()?.auth_level || null)
+const currentUser = computed(() => authService.getCurrentUser())
+
+// 初始化和数据加载
+onMounted(async () => {
+  if (isAuthenticated.value) {
+    await refreshPackages()
+  }
+})
 
 // 方法
 const getLevelType = (level: string) => {
@@ -376,15 +363,45 @@ const selectPackage = (pkg: any) => {
   selectedPackage.value = pkg
 }
 
-const handleAuthSuccess = (level: string, userInfo: any) => {
+const handleAuthSuccess = (user: any, authResult: any) => {
   authTime.value = new Date().toLocaleString('zh-CN')
-  ElMessage.success(`身份认证成功，欢迎 ${userInfo.name}`)
+  ElMessage.success(`身份认证成功，欢迎 ${user.name}`)
   refreshPackages()
 }
 
-const refreshPackages = () => {
-  // 模拟刷新包裹列表
-  ElMessage.success('包裹列表已刷新')
+const refreshPackages = async () => {
+  try {
+    const user = currentUser.value
+    if (!user) {
+      ElMessage.error('用户信息异常')
+      return
+    }
+
+    // 获取用户的包裹列表
+    const tasks = await taskService.getUserTasks(user.user_id)
+    
+    // 筛选出待取件的任务
+    userPackages.value = tasks
+      .filter(task => task.status === 'ready_for_pickup')
+      .map(task => ({
+        id: task.task_id,
+        floor: 1, // 模拟楼层
+        compartmentNumber: task.locker_id || 'A1',
+        securityLevel: task.security_level,
+        content: task.description || '包裹',
+        sender: task.initiator,
+        arrivalTime: new Date(task.created_at).toLocaleString('zh-CN'),
+        timeline: [
+          { timestamp: new Date(task.created_at).toLocaleString('zh-CN'), content: '包裹已寄出', type: 'primary' },
+          { timestamp: new Date(task.updated_at || task.created_at).toLocaleString('zh-CN'), content: '包裹已到达', type: 'success' },
+        ],
+      }))
+    
+    ElMessage.success('包裹列表已刷新')
+  } catch (error) {
+    console.error('刷新包裹列表失败:', error)
+    ElMessage.error('刷新包裹列表失败')
+  }
 }
 
 const openCompartment = async (pkg: any) => {
@@ -402,24 +419,37 @@ const openCompartment = async (pkg: any) => {
     openingPackageId.value = pkg.id
     openingCompartmentId.value = pkg.id
 
-    // 模拟开启柜门
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    successCompartment.value = `${pkg.floor}F-${pkg.compartmentNumber}`
-    showSuccessDialog.value = true
-
-    // 更新状态
-    robotStore.updateCompartmentStatus(pkg.id, { isOccupied: false, content: '', recipient: '' })
-
-    // 从用户包裹列表中移除
-    const index = userPackages.value.findIndex((p) => p.id === pkg.id)
-    if (index > -1) {
-      userPackages.value.splice(index, 1)
+    const user = currentUser.value
+    if (!user) {
+      ElMessage.error('用户信息异常')
+      return
     }
 
-    ElMessage.success('柜门已打开，请取出包裹')
+    // 完成取件任务
+    const completeRequest = {
+      task_id: pkg.id,
+      user_id: user.user_id
+    }
+
+    const result = await taskService.completeTask(completeRequest)
+    
+    if (result.success) {
+      successCompartment.value = `${pkg.floor}F-${pkg.compartmentNumber}`
+      showSuccessDialog.value = true
+
+      // 从用户包裹列表中移除
+      const index = userPackages.value.findIndex((p) => p.id === pkg.id)
+      if (index > -1) {
+        userPackages.value.splice(index, 1)
+      }
+
+      ElMessage.success('取件成功')
+    } else {
+      ElMessage.error(result.message || '取件失败')
+    }
   } catch (error) {
-    // 用户取消
+    console.error('取件失败:', error)
+    ElMessage.error('取件失败，请重试')
   } finally {
     openingPackageId.value = ''
     openingCompartmentId.value = ''

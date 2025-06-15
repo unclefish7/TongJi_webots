@@ -37,7 +37,7 @@ async def verify_authentication(request: AuthRequest):
             )
         
         return AuthResponse(
-            verified=success,
+            success=success,
             verified_level=verified_level,
             methods=methods
         )

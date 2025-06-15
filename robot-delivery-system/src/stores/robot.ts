@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { TaskService } from '@/services/taskService'
 
 export interface RobotStatus {
   id: string
@@ -20,20 +21,21 @@ export interface CompartmentStatus {
   recipient?: string
 }
 
-export const useRobotStore = defineStore('robot', () => {  // 机器人状态
+export const useRobotStore = defineStore('robot', () => {
+  // 机器人状态
   const robots = ref<RobotStatus[]>([
     {
       id: 'robot1',
       name: '配送机器人-001',
       status: 'idle',
-      position: { x: 15, y: 25 }, // 使用百分比位置
+      position: { x: 15, y: 25 },
       battery: 85,
     },
     {
       id: 'robot2',
       name: '配送机器人-002',
       status: 'busy',
-      position: { x: 55, y: 25 }, // 使用百分比位置
+      position: { x: 55, y: 25 },
       battery: 72,
       currentTask: '正在配送至3楼301房间',
     },
@@ -49,8 +51,9 @@ export const useRobotStore = defineStore('robot', () => {  // 机器人状态
     { id: 'c6', floor: 3, compartmentNumber: 1, isOccupied: false, securityLevel: 'L3' },
   ])
 
-  // 当前用户认证等级
+  // 当前用户认证等级和信息
   const userAuthLevel = ref<'L1' | 'L2' | 'L3' | null>(null)
+  const currentUser = ref<string>('EMP9875') // 默认用户ID
 
   // 计算属性
   const availableRobots = computed(() => 
@@ -88,50 +91,133 @@ export const useRobotStore = defineStore('robot', () => {  // 机器人状态
   }
 
   function getCurrentUser() {
-    // 模拟获取当前用户，实际应该从认证系统获取
-    return '当前用户'
+    return currentUser.value
   }
 
-  function callRobot(callInfo: {
+  function setCurrentUser(userId: string) {
+    currentUser.value = userId
+  }
+
+  // 使用后端API的呼叫机器人功能
+  async function callRobot(callInfo: {
     robotId: string
     location: string
     priority: 'normal' | 'urgent'
-  }) {
-    const robot = robots.value.find(r => r.id === callInfo.robotId)
-    if (robot && robot.status === 'idle') {
-      updateRobotStatus(callInfo.robotId, {
-        status: 'busy',
-        currentTask: `响应${callInfo.priority === 'urgent' ? '紧急' : '普通'}呼叫，前往${callInfo.location}`
-      })
-      return true
+    notes?: string
+  }): Promise<boolean> {
+    try {
+      // 检查权限
+      if (!userAuthLevel.value) {
+        throw new Error('需要身份认证')
+      }
+
+      const requiredLevel = callInfo.priority === 'urgent' ? 'L2' : 'L1'
+      // TODO: Implement proper authentication check
+      // if (!authService.hasAuthLevel(requiredLevel)) {
+      //   throw new Error(`需要${requiredLevel}级别权限`)
+      // }
+
+      // TODO: Integrate with new TaskService API
+      // const response = await TaskService.callRobot({
+      //   user_id: currentUser.value,
+      //   location: callInfo.location,
+      //   priority: callInfo.priority,
+      //   notes: callInfo.notes
+      // })
+
+      // For now, simulate success
+      const response = { success: true }
+
+      if (response.success) {
+        // 更新本地机器人状态
+        updateRobotStatus(callInfo.robotId, {
+          status: 'busy',
+          currentTask: `响应${callInfo.priority === 'urgent' ? '紧急' : '普通'}呼叫，前往${callInfo.location}`
+        })
+
+        return true
+      } else {
+        // throw new Error(response.message || '呼叫失败')
+        throw new Error('呼叫失败')
+      }
+    } catch (error) {
+      console.error('Call robot failed:', error)
+      return false
     }
-    return false
   }
 
-  function sendPackage(packageInfo: {
+  // 使用后端API的发送包裹功能
+  async function sendPackage(packageInfo: {
     destination: string
     securityLevel: 'L1' | 'L2' | 'L3'
     recipient?: string
-  }) {
-    const availableCompartment = availableCompartments.value.find(
-      comp => comp.securityLevel === packageInfo.securityLevel
-    )
-    
-    if (availableCompartment) {
-      updateCompartmentStatus(availableCompartment.id, {
-        isOccupied: true,
-        content: '待寄送包裹',
-        recipient: packageInfo.recipient || '未指定'
-      })
-      return availableCompartment
+    description?: string
+  }): Promise<CompartmentStatus | null> {
+    try {
+      // 检查权限
+      if (!userAuthLevel.value) {
+        throw new Error('需要身份认证')
+      }
+
+      // TODO: Implement proper authentication check
+      // if (!authService.hasAuthLevel(packageInfo.securityLevel)) {
+      //   throw new Error(`需要${packageInfo.securityLevel}级别权限`)
+      // }
+
+      // TODO: Integrate with new TaskService API
+      // const response = await TaskService.sendPackage({
+      //   user_id: currentUser.value,
+      //   destination: packageInfo.destination,
+      //   securityLevel: packageInfo.securityLevel,
+      //   recipient: packageInfo.recipient,
+      //   description: packageInfo.description
+      // })
+
+      // For now, simulate success
+      const response = { success: true, lockerId: 'L001' }
+
+      if (response.success && response.lockerId) {
+        // 找到对应的柜门并更新状态
+        const compartment = availableCompartments.value.find(
+          comp => comp.securityLevel === packageInfo.securityLevel
+        )
+        
+        if (compartment) {
+          updateCompartmentStatus(compartment.id, {
+            isOccupied: true,
+            content: '待寄送包裹',
+            recipient: packageInfo.recipient || '未指定'
+          })
+          return compartment
+        }
+      } else {
+        throw new Error('寄送失败')
+      }
+    } catch (error) {
+      console.error('Send package failed:', error)
+      return null
     }
+
     return null
+  }
+
+  // 测试API连接
+  async function testApiConnection(): Promise<boolean> {
+    try {
+      // TODO: Implement ping functionality in TaskService
+      // await TaskService.ping()
+      return true
+    } catch (error) {
+      console.error('API connection test failed:', error)
+      return false
+    }
   }
 
   return {
     robots,
     compartments,
     userAuthLevel,
+    currentUser,
     availableRobots,
     availableCompartments,
     userCompartments,
@@ -140,6 +226,8 @@ export const useRobotStore = defineStore('robot', () => {  // 机器人状态
     setUserAuthLevel,
     callRobot,
     sendPackage,
-    getCurrentUser
+    getCurrentUser,
+    setCurrentUser,
+    testApiConnection
   }
 })

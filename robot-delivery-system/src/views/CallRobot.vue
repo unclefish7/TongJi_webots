@@ -46,17 +46,20 @@
                     </div>
                   </el-option>
                 </el-select>
-              </el-form-item>
-
-              <!-- 呼叫位置 -->
+              </el-form-item>              <!-- 呼叫位置 -->
               <el-form-item label="呼叫位置" prop="location">
-                <el-cascader
+                <el-select
                   v-model="callForm.location"
-                  :options="locationOptions"
-                  :props="{ expandTrigger: 'hover' }"
                   placeholder="请选择呼叫位置"
                   style="width: 100%"
-                />
+                >
+                  <el-option
+                    v-for="location in locationOptions"
+                    :key="location.value"
+                    :label="location.label"
+                    :value="location.value"
+                  />
+                </el-select>
               </el-form-item>
 
               <!-- 呼叫类型 -->
@@ -200,10 +203,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
+import { authService } from '@/services/authService'
+import { mapService } from '@/services/mapService'
+import { robotService } from '@/services/robotService'
 import { Phone, Bell, User, Grid } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -212,7 +218,7 @@ const robotStore = useRobotStore()
 // 表单数据
 const callForm = reactive({
   robotId: '',
-  location: [],
+  location: '', // 改为字符串类型
   priority: 'normal',
   notes: '',
 })
@@ -224,39 +230,22 @@ const callRules = {
   priority: [{ required: true, message: '请选择呼叫类型', trigger: 'change' }],
 }
 
-// 位置选项
-const locationOptions = [
-  {
-    value: '1F',
-    label: '1楼',
-    children: [
-      { value: '101', label: '101房间' },
-      { value: '102', label: '102房间' },
-      { value: '103', label: '103房间' },
-      { value: 'lobby1', label: '大厅' },
-    ],
-  },
-  {
-    value: '2F',
-    label: '2楼',
-    children: [
-      { value: '201', label: '201房间' },
-      { value: '202', label: '202房间' },
-      { value: '203', label: '203房间' },
-      { value: 'lobby2', label: '大厅' },
-    ],
-  },
-  {
-    value: '3F',
-    label: '3楼',
-    children: [
-      { value: '301', label: '301房间' },
-      { value: '302', label: '302房间' },
-      { value: '303', label: '303房间' },
-      { value: 'lobby3', label: '大厅' },
-    ],
-  },
-]
+// 位置选项（从地图服务获取）
+const locationOptions = ref<any[]>([])
+
+// 初始化地图数据
+onMounted(async () => {
+  try {
+    const locations = await mapService.getAllLocations()
+    locationOptions.value = locations.map((location: any) => ({
+      value: location.name,
+      label: location.name,
+      location: location
+    }))  } catch (error) {
+    console.error('获取地点数据失败:', error)
+    ElMessage.error('获取地点数据失败')
+  }
+})
 
 // 状态
 const callFormRef = ref()
@@ -316,6 +305,18 @@ const submitCall = async () => {
     await callFormRef.value.validate()
     isSubmitting.value = true
 
+    // 检查用户认证状态
+    if (!authService.isAuthenticated()) {
+      ElMessage.error('请先进行身份认证')
+      return
+    }
+
+    const user = authService.getCurrentUser()
+    if (!user) {
+      ElMessage.error('用户信息异常')
+      return
+    }
+
     // 获取选中的机器人信息
     const selectedRobot = robotStore.robots.find((r) => r.id === callForm.robotId)
     if (!selectedRobot) {
@@ -323,33 +324,20 @@ const submitCall = async () => {
       return
     }
 
-    selectedRobotName.value = selectedRobot.name
+    selectedRobotName.value = selectedRobot.name    // 添加呼叫任务到机器人队列
+    await robotService.addCallTask(user.user_id, callForm.location)
 
-    // 模拟呼叫API调用
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // 调用store方法
-    const success = robotStore.callRobot({
-      robotId: callForm.robotId,
-      location: locationText.value,
-      priority: callForm.priority as 'normal' | 'urgent',
+    // 计算预计到达时间
+    const arrivalMinutes = callForm.priority === 'urgent' ? 3 : 5
+    const arrivalTime = new Date()
+    arrivalTime.setMinutes(arrivalTime.getMinutes() + arrivalMinutes)
+    estimatedArrival.value = arrivalTime.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
     })
 
-    if (success) {
-      // 计算预计到达时间
-      const arrivalMinutes = callForm.priority === 'urgent' ? 3 : 5
-      const arrivalTime = new Date()
-      arrivalTime.setMinutes(arrivalTime.getMinutes() + arrivalMinutes)
-      estimatedArrival.value = arrivalTime.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
-      showSuccessDialog.value = true
-      ElMessage.success('呼叫发送成功')
-    } else {
-      ElMessage.error('呼叫失败，机器人不可用')
-    }
+    showSuccessDialog.value = true
+    ElMessage.success('呼叫发送成功')
   } catch (error) {
     console.error('呼叫失败:', error)
     ElMessage.error('呼叫失败，请重试')

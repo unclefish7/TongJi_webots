@@ -6,13 +6,16 @@ class PingResponse(BaseModel):
 
 class AuthRequest(BaseModel):
     user_id: str
+    purpose: Optional[str] = None  # 用途：send/pickup，可选字段
     requested_level: str  # 请求的认证等级 L1/L2/L3
     provided: Dict[str, str]  # 可能包含 l2_auth、l3_auth
 
 class AuthResponse(BaseModel):
-    verified: bool
-    verified_level: str
-    methods: List[str]
+    success: bool  # 改为success以匹配frontend期望
+    verified_level: Optional[str] = None
+    methods: Optional[List[str]] = None
+    expires_at: Optional[str] = None
+    error: Optional[str] = None
 
 class TaskCreateRequest(BaseModel):
     user_id: str  # 发起人ID

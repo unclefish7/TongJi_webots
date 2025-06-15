@@ -1,6 +1,10 @@
 # api/task_api.py
 from fastapi import APIRouter, HTTPException
 from services.task_service import create_task, complete_task, fail_task, TaskErrorCodes
+from services.auth_service import load_users
+from typing import Dict, List, Any
+import json
+import os
 from models import (
     PingResponse, TaskCreateRequest, TaskCreateResponse,
     TaskCompleteRequest, TaskCompleteResponse,
@@ -167,3 +171,23 @@ async def fail_task_endpoint(request: TaskFailRequest):
                 "message": f"Unexpected error: {str(e)}"
             }
         )
+
+@router.get("/tasks/user/{user_id}")
+async def get_user_tasks(user_id: str, status: str = None):
+    """获取指定用户的任务列表"""
+    try:
+        # 这里先返回示例数据，后续可以从数据库获取真实数据
+        tasks = []
+        return {"tasks": tasks, "total": len(tasks)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户任务失败: {str(e)}")
+
+@router.get("/tasks/user/{user_id}/pending-pickup")
+async def get_user_pending_pickup_tasks(user_id: str):
+    """获取指定用户的待取件任务"""
+    try:
+        # 这里先返回示例数据，后续可以从数据库获取真实数据
+        tasks = []
+        return {"tasks": tasks, "total": len(tasks)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取待取件任务失败: {str(e)}")

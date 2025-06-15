@@ -10,6 +10,11 @@ const router = createRouter({
       component: MainDashboard,
     },
     {
+      path: '/map',
+      name: 'map',
+      component: () => import('../views/MapDashboard.vue'),
+    },
+    {
       path: '/call',
       name: 'call',
       component: () => import('../views/CallRobot.vue'),

@@ -5,6 +5,36 @@
       <div class="header-left">
         <h1>智能配送机器人管理系统</h1>
       </div>
+      <div class="header-center">
+        <!-- 用户认证状态显示 -->
+        <div class="auth-status">
+          <div v-if="isAuthenticated" class="user-info">
+            <el-avatar :size="32">
+              {{ currentUser?.name?.charAt(0) }}
+            </el-avatar>
+            <div class="user-details">
+              <div class="user-name">{{ currentUser?.name }}</div>
+              <el-tag :type="getAuthLevelType(currentUser?.auth_level || '')" size="small">
+                {{ currentUser?.auth_level }} 权限
+              </el-tag>
+            </div>
+            <el-button @click="showUserSwitchModal = true" size="small" type="info" plain>
+              切换用户
+            </el-button>
+          </div>
+          <div v-else class="no-auth">
+            <el-alert 
+              title="未认证" 
+              description="请先进行身份认证以使用系统功能" 
+              type="warning" 
+              :closable="false"
+            />
+            <el-button @click="showUserSwitchModal = true" type="primary" size="small">
+              身份认证
+            </el-button>
+          </div>
+        </div>
+      </div>
       <div class="header-right">
         <el-button type="primary" @click="$router.push('/call')">
           <el-icon><Phone /></el-icon>
@@ -22,7 +52,10 @@
     </el-header>
     <el-container class="main-container">
       <!-- 左侧状态栏 -->
-      <el-aside width="25%" class="status-sidebar">
+      <el-aside width="20%" class="status-sidebar">
+        <!-- API连接状态 -->
+        <ConnectionStatus />
+        
         <!-- 机器人状态 -->
         <el-card class="status-card">
           <template #header>
@@ -58,26 +91,8 @@
           </div>
         </el-card>
 
-        <!-- 系统状态 -->
-        <el-card class="status-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Monitor /></el-icon>
-              <span>系统状态</span>
-            </div>
-          </template>
-          <el-descriptions :column="1" size="small">
-            <el-descriptions-item label="在线机器人">{{ onlineRobots }}</el-descriptions-item>
-            <el-descriptions-item label="可用机器人">{{ availableRobots }}</el-descriptions-item>
-            <el-descriptions-item label="繁忙机器人">{{ busyRobots }}</el-descriptions-item>
-            <el-descriptions-item label="可用柜门">{{
-              availableCompartments
-            }}</el-descriptions-item>
-            <el-descriptions-item label="已占用柜门">{{
-              occupiedCompartments
-            }}</el-descriptions-item>
-          </el-descriptions>
-        </el-card>
+        <!-- 机器人任务队列 -->
+        <RobotTaskQueue />
       </el-aside>
 
       <!-- 主要内容区域 -->
@@ -88,115 +103,29 @@
             <div class="card-header">
               <el-icon><Location /></el-icon>
               <span>实时地图</span>
-              <div class="map-controls">
-                <el-button-group size="small">
-                  <el-button @click="zoomIn">
-                    <el-icon><ZoomIn /></el-icon>
-                  </el-button>
-                  <el-button @click="zoomOut">
-                    <el-icon><ZoomOut /></el-icon>
-                  </el-button>
-                  <el-button @click="resetView">
-                    <el-icon><Refresh /></el-icon>
-                  </el-button>
-                </el-button-group>
-              </div>
             </div>
           </template>
-          <div class="map-content" ref="mapContainer">
-            <!-- 模拟地图背景 -->
-            <div class="map-background">
-              <!-- 楼层结构 -->
-              <div class="floor" v-for="floor in floors" :key="floor.id" :style="floor.style">
-                <div class="floor-label">{{ floor.name }}</div>
-                <!-- 房间 -->
-                <div v-for="room in floor.rooms" :key="room.id" class="room" :style="room.style">
-                  {{ room.name }}
-                </div>
-              </div>
-
-              <!-- 机器人位置 -->
-              <div
-                v-for="robot in robotStore.robots"
-                :key="robot.id"
-                class="robot-marker"
-                :style="{ left: robot.position.x + 'px', top: robot.position.y + 'px' }"
-                :class="{ 'robot-busy': robot.status === 'busy' }"
-              >
-                <el-tooltip
-                  :content="robot.name + ' - ' + getStatusText(robot.status)"
-                  placement="top"
-                >
-                  <div class="robot-icon">
-                    <el-icon><User /></el-icon>
-                  </div>
-                </el-tooltip>
-              </div>
-
-              <!-- 路径线 -->
-              <svg class="path-overlay">
-                <path
-                  v-for="path in activePaths"
-                  :key="path.id"
-                  :d="path.d"
-                  stroke="#409eff"
-                  stroke-width="3"
-                  fill="none"
-                  stroke-dasharray="5,5"
-                />
-              </svg>
-            </div>
+          <div class="map-content-wrapper">
+            <EmbeddedMapViewer />
           </div>
         </el-card>
       </el-main>
     </el-container>
-    <!-- 底部任务栏 -->
-    <el-footer height="280px" class="task-footer">
-      <el-card class="task-card">
-        <template #header>
-          <div class="card-header">
-            <el-icon><List /></el-icon>
-            <span>任务队列</span>
-            <el-badge :value="activeTasks.length" class="task-badge">
-              <el-button size="small" @click="refreshTasks">
-                <el-icon><Refresh /></el-icon>
-                刷新
-              </el-button>
-            </el-badge>
-          </div>
-        </template>
-        <el-table :data="activeTasks" height="240" size="small">
-          <el-table-column prop="id" label="任务ID" width="80" />
-          <el-table-column prop="type" label="类型" width="100">
-            <template #default="scope">
-              <el-tag :type="getTaskTypeColor(scope.row.type)" size="small">
-                {{ scope.row.type }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="robot" label="执行机器人" width="120" />
-          <el-table-column prop="description" label="任务描述" />
-          <el-table-column prop="progress" label="进度" width="120">
-            <template #default="scope">
-              <el-progress :percentage="scope.row.progress" :stroke-width="6" :show-text="false" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" width="100">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === '执行中' ? 'primary' : 'success'" size="small">
-                {{ scope.row.status }}
-              </el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-    </el-footer>
+
+    <!-- 用户切换/认证模态框 -->
+    <UserAuthModal
+      v-model="showUserSwitchModal"
+      purpose="send"
+      required-level="L1"
+      @auth-success="handleAuthSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRobotStore } from '@/stores/robot'
+import { authService } from '@/services/authService'
 import {
   Phone,
   Box,
@@ -210,8 +139,40 @@ import {
   List,
   CircleCheck,
 } from '@element-plus/icons-vue'
+import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import EmbeddedMapViewer from '@/components/EmbeddedMapViewer.vue'
+import RobotTaskQueue from '@/components/RobotTaskQueue.vue'
+import UserAuthModal from '@/components/UserAuthModal.vue'
 
 const robotStore = useRobotStore()
+
+// 认证相关状态
+const showUserSwitchModal = ref(false)
+
+// 认证相关计算属性
+const isAuthenticated = computed(() => authService.isAuthenticated())
+const currentUser = computed(() => authService.getCurrentUser())
+
+// 方法
+const getAuthLevelType = (level: string) => {
+  const types = {
+    'L1': 'success',
+    'L2': 'warning', 
+    'L3': 'danger'
+  }
+  return types[level as keyof typeof types] || 'info'
+}
+
+const handleAuthSuccess = (user: any, authResult: any) => {
+  console.log('用户认证成功:', user, authResult)
+  showUserSwitchModal.value = false
+  
+  // 触发响应式更新
+  nextTick(() => {
+    // 强制重新计算computed属性
+    console.log('认证状态已更新:', authService.isAuthenticated())
+  })
+}
 
 // 地图相关数据
 const mapContainer = ref()
@@ -276,26 +237,6 @@ const activePaths = ref([
   },
 ])
 
-// 任务数据
-const activeTasks = ref([
-  {
-    id: 'T001',
-    type: '配送',
-    robot: '机器人-001',
-    description: '配送包裹至3楼301房间',
-    progress: 65,
-    status: '执行中',
-  },
-  {
-    id: 'T002',
-    type: '取件',
-    robot: '机器人-002',
-    description: '从2楼201房间取件',
-    progress: 30,
-    status: '执行中',
-  },
-])
-
 // 计算属性
 const onlineRobots = computed(() => robotStore.robots.length)
 const availableRobots = computed(() => robotStore.availableRobots.length)
@@ -332,29 +273,8 @@ const getBatteryColor = (battery: number) => {
   return '#f56c6c'
 }
 
-const getTaskTypeColor = (type: string) => {
-  const colors = {
-    配送: 'primary',
-    取件: 'success',
-    呼叫: 'warning',
-  }
-  return colors[type as keyof typeof colors] || 'info'
-}
-
-const zoomIn = () => {
-  console.log('放大地图')
-}
-
-const zoomOut = () => {
-  console.log('缩小地图')
-}
-
 const resetView = () => {
   console.log('重置视图')
-}
-
-const refreshTasks = () => {
-  console.log('刷新任务')
 }
 
 onMounted(() => {
@@ -391,6 +311,51 @@ onMounted(() => {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 2rem;
+}
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0.5rem 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-name {
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.no-auth {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.no-auth .el-alert {
+  margin: 0;
+}
+
 .header-right {
   display: flex;
   gap: 12px;
@@ -421,7 +386,22 @@ onMounted(() => {
 .status-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 15px;
+  padding-right: 15px;
+  height: calc(100vh - 80px); /* 减去头部高度 */
+  overflow-y: auto;
+  
+  /* 让内容填满整个高度 */
+  > .status-card {
+    flex-shrink: 0;
+  }
+  
+  /* 让任务队列组件占据剩余空间 */
+  > .task-queue-card {
+    flex: 1;
+    min-height: 300px;
+    overflow: hidden;
+  }
 }
 
 .status-card {
@@ -551,19 +531,13 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.map-controls {
-  display: flex;
-  gap: 10px;
-}
-
-.map-content {
-  height: calc(100vh - 480px);
-  min-height: 300px;
+.map-content-wrapper {
+  height: calc(100vh - 200px); /* 增加高度，减少上方留白 */
+  min-height: 500px; /* 增加最小高度 */
   position: relative;
   overflow: hidden;
   border: 2px solid rgba(100, 108, 154, 0.2);
   border-radius: 12px;
-  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
 }
 
 .map-background {

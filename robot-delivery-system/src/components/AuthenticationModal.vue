@@ -132,6 +132,7 @@
 import { ref, computed } from 'vue'
 import { CreditCard, User, Key } from '@element-plus/icons-vue'
 import { useRobotStore } from '@/stores/robot'
+import { AuthService } from '@/services/authService'
 
 interface Props {
   modelValue: boolean
@@ -206,36 +207,42 @@ const startVerification = async () => {
   }, 200)
 }
 
-const finishVerification = () => {
+const finishVerification = async () => {
   isVerifying.value = false
 
-  // 模拟认证结果（实际应该调用真实的认证API）
-  const success = Math.random() > 0.2 // 80% 成功率
+  try {
+    // 使用真实的认证服务，传入当前用户ID
+    const result = await AuthService.performAuth(
+      selectedAuthMethod.value as 'card' | 'face' | 'fingerprint',
+      robotStore.getCurrentUser()
+    )
+    
+    if (result.success && result.userInfo) {
+      verificationStatus.value = 'success'
+      authResult.value = {
+        success: true,
+        title: '认证成功',
+        message: `您已获得${result.userInfo.level}级别访问权限`,
+        userInfo: result.userInfo,
+      }
 
-  if (success) {
-    verificationStatus.value = 'success'
-    const level = getAuthLevel()
-    const userInfo = {
-      name: '张三',
-      level: level,
-      department: level === 'L1' ? '普通员工' : level === 'L2' ? '部门主管' : '系统管理员',
-      expiry: '2024-12-31',
+      robotStore.setUserAuthLevel(result.userInfo.level)
+    } else {
+      verificationStatus.value = 'exception'
+      authResult.value = {
+        success: false,
+        title: '认证失败',
+        message: '身份验证失败，请重试',
+        userInfo: null,
+      }
     }
-
-    authResult.value = {
-      success: true,
-      title: '认证成功',
-      message: `您已获得${level}级别访问权限`,
-      userInfo,
-    }
-
-    robotStore.setUserAuthLevel(level)
-  } else {
+  } catch (error) {
+    console.error('Authentication error:', error)
     verificationStatus.value = 'exception'
     authResult.value = {
       success: false,
       title: '认证失败',
-      message: '身份验证失败，请重试',
+      message: '网络错误或服务不可用，请重试',
       userInfo: null,
     }
   }

@@ -4,6 +4,7 @@
     "name": "王勇",
     "role": "财务处",
     "auth_level": "L3",
+    "office_location": "A座财务部",
     "l2_auth": "546121",
     "l3_auth": "FACE_EMP7064_4944"
   },
@@ -12,6 +13,7 @@
     "name": "黄静",
     "role": "前台人员",
     "auth_level": "L2",
+    "office_location": "B座前台",
     "l2_auth": "495481",
     "l3_auth": "FACE_EMP4958_3970"
   },
@@ -20,6 +22,7 @@
     "name": "何芳",
     "role": "经理",
     "auth_level": "L1",
+    "office_location": "C座经理室",
     "l3_auth": "FACE_EMP9875_7767"
   },
   {
@@ -27,6 +30,7 @@
     "name": "陈丽",
     "role": "普通员工",
     "auth_level": "L2",
+    "office_location": "A座办公区",
     "l2_auth": "323530",
     "l3_auth": "FACE_EMP9260_7745"
   },
@@ -35,6 +39,7 @@
     "name": "杨强",
     "role": "经理",
     "auth_level": "L3",
+    "office_location": "B座经理室",
     "l2_auth": "695084",
     "l3_auth": "FACE_EMP6330_9259"
   }

@@ -94,17 +94,20 @@
                     </div>
                   </el-radio>
                 </el-radio-group>
-              </el-form-item>
-
-              <!-- 收件地址 -->
+              </el-form-item>              <!-- 收件地址 -->
               <el-form-item label="收件地址" prop="destination">
-                <el-cascader
+                <el-select
                   v-model="sendForm.destination"
-                  :options="locationOptions"
-                  :props="{ expandTrigger: 'hover' }"
                   placeholder="请选择收件地址"
                   style="width: 100%"
-                />
+                >
+                  <el-option
+                    v-for="location in locationOptions"
+                    :key="location.value"
+                    :label="location.label"
+                    :value="location.value"
+                  />
+                </el-select>
               </el-form-item>
 
               <!-- L3级别收件人信息 -->
@@ -270,10 +273,13 @@
           </el-card>
         </div>
       </div>
-    </div>
-
-    <!-- 身份认证弹窗 -->
-    <AuthenticationModal v-model="showAuthModal" @auth-success="handleAuthSuccess" />
+    </div>    <!-- 身份认证弹窗 -->
+    <UserAuthModal
+      v-model="showAuthModal"
+      purpose="send"
+      :required-level="sendForm.securityLevel"
+      @auth-success="handleAuthSuccess"
+    />
 
     <!-- 寄送成功对话框 -->
     <el-dialog
@@ -321,11 +327,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
-import AuthenticationModal from '@/components/AuthenticationModal.vue'
+import { authService } from '@/services/authService'
+import { mapService } from '@/services/mapService'
+import { taskService } from '@/services/taskService'
+import { robotService } from '@/services/robotService'
+import UserAuthModal from '@/components/UserAuthModal.vue'
 import { Box, Lock, Upload, Grid, InfoFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -334,7 +344,7 @@ const robotStore = useRobotStore()
 // 表单数据
 const sendForm = reactive({
   securityLevel: 'L1',
-  destination: [],
+  destination: '', // 改为字符串类型
   recipientInfo: {
     name: '',
     phone: '',
@@ -354,36 +364,28 @@ const sendRules = computed(() => ({
   }),
 }))
 
-// 位置选项
-const locationOptions = [
-  {
-    value: '1F',
-    label: '1楼',
-    children: [
-      { value: '101', label: '101房间' },
-      { value: '102', label: '102房间' },
-      { value: '103', label: '103房间' },
-    ],
-  },
-  {
-    value: '2F',
-    label: '2楼',
-    children: [
-      { value: '201', label: '201房间' },
-      { value: '202', label: '202房间' },
-      { value: '203', label: '203房间' },
-    ],
-  },
-  {
-    value: '3F',
-    label: '3楼',
-    children: [
-      { value: '301', label: '301房间' },
-      { value: '302', label: '302房间' },
-      { value: '303', label: '303房间' },
-    ],
-  },
-]
+// 位置选项（从地图服务获取）
+const locationOptions = ref<any[]>([])
+
+// 初始化地图数据
+onMounted(async () => {
+  try {
+    console.log('开始获取地点数据...')
+    const locations = await mapService.getAllLocations()
+    console.log('获取到的地点数据:', locations)
+    
+    locationOptions.value = locations.map((location: any) => ({
+      value: location.id,
+      label: location.name,
+      location: location
+    }))
+    
+    console.log('处理后的地点选项:', locationOptions.value)
+  } catch (error) {
+    console.error('获取地点数据失败:', error)
+    ElMessage.error('获取地点数据失败')
+  }
+})
 
 // 状态
 const sendFormRef = ref()
@@ -395,8 +397,9 @@ const sendTime = ref('')
 const estimatedDelivery = ref('')
 
 // 计算属性
-const isAuthenticated = computed(() => robotStore.userAuthLevel !== null)
-const userAuthLevel = computed(() => robotStore.userAuthLevel)
+const isAuthenticated = computed(() => authService.isAuthenticated())
+const userAuthLevel = computed(() => authService.getCurrentUser()?.auth_level || null)
+const currentUser = computed(() => authService.getCurrentUser())
 
 const availableCompartments = computed(() => robotStore.compartments.filter((c) => !c.isOccupied))
 
@@ -445,8 +448,9 @@ const onSecurityLevelChange = () => {
   }
 }
 
-const handleAuthSuccess = (level: string, userInfo: any) => {
-  ElMessage.success(`身份认证成功，获得${level}级别权限`)
+const handleAuthSuccess = (user: any, authResult: any) => {
+  ElMessage.success(`身份认证成功，获得${user.auth_level}级别权限`)
+  console.log('认证成功:', user, authResult)
 }
 
 const submitSend = async () => {
@@ -456,8 +460,20 @@ const submitSend = async () => {
     await sendFormRef.value.validate()
     isSubmitting.value = true
 
+    // 检查认证状态
+    if (!isAuthenticated.value) {
+      ElMessage.error('请先进行身份认证')
+      return
+    }
+
     // 检查认证等级
-    const authLevelNum = parseInt(userAuthLevel.value?.replace('L', '') || '0')
+    const currentAuthLevel = userAuthLevel.value
+    if (!currentAuthLevel) {
+      ElMessage.error('无法获取认证等级')
+      return
+    }
+
+    const authLevelNum = parseInt(currentAuthLevel.replace('L', ''))
     const requiredLevelNum = parseInt(sendForm.securityLevel.replace('L', ''))
 
     if (authLevelNum < requiredLevelNum) {
@@ -465,20 +481,48 @@ const submitSend = async () => {
       return
     }
 
-    // 模拟寄送API调用
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    // 获取当前用户信息
+    const user = currentUser.value
+    if (!user) {
+      ElMessage.error('用户信息异常')
+      return
+    }
 
-    // 调用store方法
-    const result = robotStore.sendPackage({
-      destination: sendForm.destination.join(' '),
-      securityLevel: sendForm.securityLevel as 'L1' | 'L2' | 'L3',
-      recipient: sendForm.recipientInfo.name || '未指定',
-    })
+    // 获取目标地点信息
+    const targetLocationId = Array.isArray(sendForm.destination) ? sendForm.destination[0] : sendForm.destination
+    const targetLocation = await mapService.getLocationByName(targetLocationId)
+    if (!targetLocation) {
+      ElMessage.error('目标地点信息异常')
+      return
+    }
 
-    if (result) {
-      selectedCompartment.value = result
+    // 创建寄送任务
+    const taskRequest = {
+      user_id: user.user_id,
+      receiver: sendForm.recipientInfo.name || '未指定',
+      location_id: targetLocationId,
+      security_level: sendForm.securityLevel as 'L1' | 'L2' | 'L3',
+      description: sendForm.description
+    }
 
-      // 设置时间信息
+    const taskResult = await taskService.createTask(taskRequest)
+
+    if (taskResult.success && taskResult.task_id) {
+      // 添加机器人任务到队列
+      await robotService.addDeliveryTask(
+        taskResult.task_id,
+        user.user_id,
+        targetLocationId,
+        `寄送包裹给${taskRequest.receiver}`
+      )
+
+      // 设置成功信息
+      selectedCompartment.value = {
+        lockerId: taskResult.locker_id,
+        compartmentId: 'A1', // 模拟柜门编号
+        taskId: taskResult.task_id
+      }
+
       sendTime.value = new Date().toLocaleString('zh-CN')
       const deliveryTime = new Date()
       deliveryTime.setMinutes(
@@ -489,7 +533,7 @@ const submitSend = async () => {
       showSuccessDialog.value = true
       ElMessage.success('包裹寄送成功')
     } else {
-      ElMessage.error('没有可用的柜门，请稍后重试')
+      ElMessage.error(taskResult.message || '寄送失败')
     }
   } catch (error) {
     console.error('寄送失败:', error)

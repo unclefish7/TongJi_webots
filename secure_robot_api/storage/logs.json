@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "log_id": "LOG20250615232204EIRIFQ",
+    "log_type": "auth",
+    "related_user": "EMP7064",
+    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
+    "auth_mode": [
+      "ID"
+    ],
+    "result": "success",
+    "timestamp": "2025-06-15T23:22:04.497461"
+  },
+  {
+    "log_id": "LOG202506152357051HUXVY",
+    "log_type": "auth",
+    "related_user": "EMP7064",
+    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
+    "auth_mode": [
+      "ID"
+    ],
+    "result": "success",
+    "timestamp": "2025-06-15T23:57:05.644950"
+  },
+  {
+    "log_id": "LOG20250616000120Q50Z66",
+    "log_type": "auth",
+    "related_user": "EMP4958",
+    "message": "User EMP4958 authentication attempt for level L1, verified at level L1",
+    "auth_mode": [
+      "ID"
+    ],
+    "result": "success",
+    "timestamp": "2025-06-16T00:01:20.756824"
+  }
+]
