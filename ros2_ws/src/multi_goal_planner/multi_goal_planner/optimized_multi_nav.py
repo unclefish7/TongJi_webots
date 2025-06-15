@@ -27,6 +27,17 @@ class OptimizedMultiNav(Node):
             10
         )
         
+        # 创建next订阅者
+        self.next_subscription = self.create_subscription(
+            String,
+            '/next',
+            self.next_callback,
+            10
+        )
+        
+        # 创建next发布者
+        self.next_publisher = self.create_publisher(String, '/next', 10)
+        
         # 创建 TF 缓冲区和监听器
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -41,9 +52,20 @@ class OptimizedMultiNav(Node):
         self.current_goals = []
         self.current_goal_index = 0
         self.is_navigating = False
+        self.waiting_for_next = False  # 标记是否在等待next信号
         
         self.get_logger().info('Optimized Multi Navigation node initialized')
         self.get_logger().info('Using TF to get current robot position')
+        self.get_logger().info('Waiting for /next topic to start navigation...')
+
+    def next_callback(self, msg):
+        """处理next信号，继续到下一个目标点"""
+        if self.waiting_for_next and self.current_goals:
+            self.get_logger().info('Received next signal, continuing to next goal...')
+            self.waiting_for_next = False
+            self.navigate_to_next_goal()
+        else:
+            self.get_logger().warn('Received next signal but not waiting for it or no goals available')
 
     def get_current_position(self):
         """使用TF获取机器人当前位置"""
@@ -226,15 +248,23 @@ class OptimizedMultiNav(Node):
             if self.is_navigating:
                 self.get_logger().info('Canceling current navigation')
                 self.nav_client.cancel_all_goals()
+                
+            # 重置状态
+            self.waiting_for_next = False
             
             # 计算最优路径（以当前位置为起点）
             optimized_goals = self.optimize_path(valid_goals)
             self.get_logger().info(f'Optimized path from current position: {optimized_goals}')
             
-            # 开始导航
+            # 准备导航
             self.current_goals = optimized_goals
             self.current_goal_index = 0
-            self.navigate_to_next_goal()
+            self.waiting_for_next = True
+            
+            # 等待手动发送next信号开始导航
+            first_goal_name = self.current_goals[0] if self.current_goals else "unknown"
+            self.get_logger().info(f'Task ready! Waiting for /next signal to start navigation to: {first_goal_name}')
+            self.get_logger().info('Please publish: ros2 topic pub --once /next std_msgs/String "data: \'start\'"')
             
         except json.JSONDecodeError:
             self.get_logger().error('Invalid JSON format in command')
@@ -246,6 +276,7 @@ class OptimizedMultiNav(Node):
         if self.current_goal_index >= len(self.current_goals):
             self.get_logger().info('All goals completed!')
             self.is_navigating = False
+            self.waiting_for_next = False
             return
         
         goal_name = self.current_goals[self.current_goal_index]
@@ -269,6 +300,7 @@ class OptimizedMultiNav(Node):
         
         # 发送导航目标
         self.is_navigating = True
+        self.waiting_for_next = False
         future = self.nav_client.send_goal_async(goal_msg)
         future.add_done_callback(self.navigation_response_callback)
 
@@ -319,9 +351,18 @@ class OptimizedMultiNav(Node):
         else:
             self.get_logger().warn(f'Failed to reach: {goal_name}')
         
-        # 继续下一个目标
+        # 移动到下一个目标索引
         self.current_goal_index += 1
-        self.navigate_to_next_goal()
+        self.is_navigating = False
+        
+        # 检查是否还有更多目标
+        if self.current_goal_index < len(self.current_goals):
+            next_goal_name = self.current_goals[self.current_goal_index]
+            self.get_logger().info(f'Reached {goal_name}. Waiting for /next signal to continue to: {next_goal_name}')
+            self.waiting_for_next = True
+        else:
+            self.get_logger().info('All goals completed!')
+            self.waiting_for_next = False
 
 
 def main(args=None):
