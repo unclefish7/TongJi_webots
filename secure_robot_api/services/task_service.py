@@ -964,7 +964,7 @@ def send_next_to_robot() -> tuple[bool, str]:
         current_execution["waiting_for_next"] = False
         queue_level = current_execution["current_queue_level"]
         task_count = current_execution["completed_count"] + 1
-        log_task_operation(f"{queue_level}_queue", "next_command_sent", f"target_{task_count}")
+        # log_task_operation(f"{queue_level}_queue", "next_command_sent", f"target_{task_count}")
         return True, f"Next command sent for {queue_level} queue, continuing to target {task_count}"
     else:
         return False, f"Failed to send next command to robot: {error}"

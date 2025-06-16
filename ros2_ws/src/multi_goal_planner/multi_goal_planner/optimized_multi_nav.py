@@ -13,11 +13,16 @@ import itertools
 import tf2_ros
 from tf2_ros import TransformException
 from ament_index_python.packages import get_package_share_directory
+import requests  # 添加HTTP请求库
 
 
 class OptimizedMultiNav(Node):
     def __init__(self):
         super().__init__('optimized_multi_nav')
+        
+        # API端点配置
+        self.API_BASE_URL = "http://localhost:8000"
+        self.ARRIVED_API_ENDPOINT = f"{self.API_BASE_URL}/api/robot/arrived"
         
         # 创建订阅者
         self.subscription = self.create_subscription(
@@ -60,12 +65,16 @@ class OptimizedMultiNav(Node):
 
     def next_callback(self, msg):
         """处理next信号，继续到下一个目标点"""
-        if self.waiting_for_next and self.current_goals:
-            self.get_logger().info('Received next signal, continuing to next goal...')
-            self.waiting_for_next = False
-            self.navigate_to_next_goal()
+        # 恢复等待next的判断
+        if msg.data == "start" or msg.data == "continue":
+            if self.waiting_for_next and self.current_goals:
+                self.get_logger().info('Received next signal, continuing to next goal...')
+                self.waiting_for_next = False
+                self.navigate_to_next_goal()
+            else:
+                self.get_logger().warn('Received next signal but not waiting for it or no goals available')
         else:
-            self.get_logger().warn('Received next signal but not waiting for it or no goals available')
+            self.get_logger().warn(f'Unrecognized next command: {msg.data}')
 
     def get_current_position(self):
         """使用TF获取机器人当前位置"""
@@ -340,6 +349,39 @@ class OptimizedMultiNav(Node):
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.navigation_result_callback)
 
+    def notify_backend_arrived(self):
+        """通知后端API机器人已到达目标点"""
+        try:
+            self.get_logger().info(f'Notifying backend API: robot arrived at {self.current_goals[self.current_goal_index-1]}')
+            
+            # 发送POST请求到后端API
+            response = requests.post(
+                self.ARRIVED_API_ENDPOINT,
+                json={},  # 空JSON体，API只需要知道机器人到达
+                headers={'Content-Type': 'application/json'},
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                self.get_logger().info('Successfully notified backend API')
+                data = response.json()
+                self.get_logger().info(f'Backend response: {data.get("message", "No message")}')
+                return True
+            else:
+                self.get_logger().error(f'Failed to notify backend API: HTTP {response.status_code}')
+                self.get_logger().error(f'Response: {response.text[:100]}')
+                return False
+                
+        except requests.exceptions.ConnectionError:
+            self.get_logger().error('Connection error: Backend API not available')
+            return False
+        except requests.exceptions.Timeout:
+            self.get_logger().error('Timeout error: Backend API took too long to respond')
+            return False
+        except Exception as e:
+            self.get_logger().error(f'Error notifying backend API: {str(e)}')
+            return False
+
     def navigation_result_callback(self, future):
         """处理导航结果"""
         result = future.result().result
@@ -354,6 +396,11 @@ class OptimizedMultiNav(Node):
         # 移动到下一个目标索引
         self.current_goal_index += 1
         self.is_navigating = False
+        
+        # 通知后端API机器人已到达
+        api_notified = self.notify_backend_arrived()
+        if not api_notified:
+            self.get_logger().warn('Backend API notification failed, but continuing with navigation process')
         
         # 检查是否还有更多目标
         if self.current_goal_index < len(self.current_goals):
