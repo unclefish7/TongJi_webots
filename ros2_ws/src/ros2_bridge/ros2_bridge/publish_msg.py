@@ -20,11 +20,11 @@ class TopicBridgeNode(Node):
     def __init__(self):
         super().__init__('topic_bridge_node')
         
-        # 存储动态创建的发布者
-        self.publishers: Dict[str, Publisher] = {}
+        # 存储动态创建的发布者 - 使用话题名作为键
+        self.topic_publishers: Dict[str, Publisher] = {}
         
         # 存储已加载的消息类型
-        self.message_types: Dict[str, type] = {}
+        self.cached_message_types: Dict[str, type] = {}
         
         self.get_logger().info('Topic Bridge Node 已启动')
         
@@ -38,8 +38,8 @@ class TopicBridgeNode(Node):
         Returns:
             消息类型类，如果加载失败返回None
         """
-        if type_string in self.message_types:
-            return self.message_types[type_string]
+        if type_string in self.cached_message_types:
+            return self.cached_message_types[type_string]
         
         try:
             # 解析包名和消息类型
@@ -58,7 +58,7 @@ class TopicBridgeNode(Node):
             message_type = getattr(module, message_name)
             
             # 缓存消息类型
-            self.message_types[type_string] = message_type
+            self.cached_message_types[type_string] = message_type
             
             self.get_logger().info(f'成功加载消息类型: {type_string}')
             return message_type
@@ -78,23 +78,67 @@ class TopicBridgeNode(Node):
         Returns:
             发布者对象，如果创建失败返回None
         """
-        publisher_key = f'{topic}:{message_type.__name__}'
+        # 确保话题名以 / 开头
+        if not topic.startswith('/'):
+            topic = '/' + topic
         
-        if publisher_key in self.publishers:
-            return self.publishers[publisher_key]
+        # 检查是否已存在该话题的发布者
+        if topic in self.topic_publishers:
+            self.get_logger().debug(f'使用已存在的发布者: {topic}')
+            return self.topic_publishers[topic]
         
         try:
-            # 创建新的发布者
-            publisher = self.create_publisher(message_type, topic, 10)
-            self.publishers[publisher_key] = publisher
+            # 验证话题名格式
+            if not self._is_valid_topic_name(topic):
+                self.get_logger().error(f'无效的话题名格式: {topic}')
+                return None
             
-            self.get_logger().info(f'创建发布者: {topic} ({message_type.__name__})')
+            # 创建新的发布者
+            self.get_logger().info(f'正在创建发布者: {topic} ({message_type.__name__})')
+            
+            # 直接调用父类方法创建发布者
+            publisher = self.create_publisher(message_type, topic, 10)
+            
+            # 存储发布者
+            self.topic_publishers[topic] = publisher
+            
+            self.get_logger().info(f'成功创建发布者: {topic} ({message_type.__name__})')
             return publisher
             
         except Exception as e:
             self.get_logger().error(f'创建发布者失败 {topic}: {str(e)}')
+            import traceback
+            self.get_logger().error(f'详细错误信息: {traceback.format_exc()}')
             return None
     
+    def _is_valid_topic_name(self, topic: str) -> bool:
+        """
+        验证话题名是否有效
+        
+        Args:
+            topic: 话题名
+            
+        Returns:
+            是否有效
+        """
+        # 简化验证逻辑，避免复杂的正则表达式
+        if not topic.startswith('/'):
+            return False
+        
+        # 移除开头的斜杠
+        topic_name = topic[1:]
+        
+        # 空话题名无效
+        if not topic_name:
+            return False
+        
+        # 基本字符检查：允许字母、数字、下划线、斜杠
+        allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/')
+        if not all(c in allowed_chars for c in topic_name):
+            return False
+        
+        return True
+
     def create_message_from_dict(self, message_type: type, data: Dict[str, Any]) -> Optional[Any]:
         """
         根据字典数据创建ROS 2消息对象
@@ -117,6 +161,8 @@ class TopicBridgeNode(Node):
             
         except Exception as e:
             self.get_logger().error(f'创建消息失败: {str(e)}')
+            import traceback
+            self.get_logger().error(f'详细错误信息: {traceback.format_exc()}')
             return None
     
     def _set_message_fields(self, message: Any, data: Dict[str, Any]):
@@ -129,13 +175,16 @@ class TopicBridgeNode(Node):
         """
         for field_name, field_value in data.items():
             if hasattr(message, field_name):
-                if isinstance(field_value, dict):
-                    # 嵌套消息
-                    nested_msg = getattr(message, field_name)
-                    self._set_message_fields(nested_msg, field_value)
-                else:
-                    # 基本类型字段
-                    setattr(message, field_name, field_value)
+                try:
+                    if isinstance(field_value, dict):
+                        # 嵌套消息
+                        nested_msg = getattr(message, field_name)
+                        self._set_message_fields(nested_msg, field_value)
+                    else:
+                        # 基本类型字段
+                        setattr(message, field_name, field_value)
+                except Exception as e:
+                    self.get_logger().error(f'设置字段 {field_name} 失败: {str(e)}')
             else:
                 self.get_logger().warn(f'消息类型中不存在字段: {field_name}')
     
@@ -152,6 +201,8 @@ class TopicBridgeNode(Node):
             (成功标志, 错误信息)
         """
         try:
+            self.get_logger().debug(f'开始发布消息到话题: {topic}, 类型: {type_string}')
+            
             # 获取消息类型
             message_type = self.get_message_type(type_string)
             if message_type is None:
@@ -176,6 +227,8 @@ class TopicBridgeNode(Node):
         except Exception as e:
             error_msg = f'发布消息时发生错误: {str(e)}'
             self.get_logger().error(error_msg)
+            import traceback
+            self.get_logger().error(f'详细错误信息: {traceback.format_exc()}')
             return False, error_msg
 
 
@@ -272,10 +325,12 @@ def ros_spin_thread(node):
 
 async def main_async():
     """异步主函数"""
-    # 初始化ROS 2
-    rclpy.init()
+    ros_node = None
     
     try:
+        # 初始化ROS 2
+        rclpy.init()
+        
         # 创建ROS节点
         ros_node = TopicBridgeNode()
         
@@ -298,12 +353,18 @@ async def main_async():
             await asyncio.sleep(1)
             
     except KeyboardInterrupt:
-        ros_node.get_logger().info('收到中断信号，正在关闭...')
+        if ros_node:
+            ros_node.get_logger().info('收到中断信号，正在关闭...')
+        else:
+            print('收到中断信号，正在关闭...')
     except Exception as e:
-        ros_node.get_logger().error(f'主函数发生错误: {str(e)}')
+        if ros_node:
+            ros_node.get_logger().error(f'主函数发生错误: {str(e)}')
+        else:
+            print(f'主函数发生错误: {str(e)}')
     finally:
         # 清理资源
-        if 'ros_node' in locals():
+        if ros_node is not None:
             ros_node.destroy_node()
         rclpy.shutdown()
 

@@ -148,6 +148,22 @@ def log_locker_operation(locker_id: str, operation: str, task_id: Optional[str] 
         result=result
     )
 
+def log_task_operation(task_id: str, operation: str, details: str = "", 
+                      success: bool = True, user_id: Optional[str] = None) -> bool:
+    """记录任务操作日志"""
+    result = "success" if success else "failed"
+    message = f"Task {task_id} operation: {operation}"
+    if details:
+        message += f" - {details}"
+    
+    return create_log(
+        log_type="delivery",
+        message=message,
+        related_user=user_id,
+        related_task=task_id,
+        result=result
+    )
+
 def log_error(message: str, related_user: Optional[str] = None, 
               related_task: Optional[str] = None) -> bool:
     """记录错误日志"""

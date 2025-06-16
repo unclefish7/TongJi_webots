@@ -1,6 +1,10 @@
 # api/task_api.py
 from fastapi import APIRouter, HTTPException
-from services.task_service import create_task, complete_task, fail_task, TaskErrorCodes
+from services.task_service import (
+    create_task, complete_task, fail_task, TaskErrorCodes,
+    remove_task_from_queue, handle_robot_arrival, send_next_to_robot,
+    get_queue_status, start_task_execution, check_ros2_bridge_connection
+)
 from services.auth_service import load_users
 from typing import Dict, List, Any
 import json
@@ -172,6 +176,144 @@ async def fail_task_endpoint(request: TaskFailRequest):
             }
         )
 
+@router.post("/cancel/{task_id}")
+async def cancel_task(task_id: str):
+    """
+    取消任务（从队列中移除）
+    
+    - **task_id**: 要取消的任务ID
+    """
+    try:
+        success, message = remove_task_from_queue(task_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "TASK_010",
+                    "message": message
+                }
+            )
+        
+        return {
+            "success": True,
+            "code": "TASK_000",
+            "message": message
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
+        )
+
+@router.post("/robot/arrived")
+async def robot_arrived():
+    """
+    机器人到达通知接口（由ROS2桥接调用）
+    """
+    try:
+        success, message = handle_robot_arrival()
+        
+        return {
+            "success": success,
+            "message": message
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999", 
+                "message": f"Error handling robot arrival: {str(e)}"
+            }
+        )
+
+@router.post("/robot/next")
+async def send_next():
+    """
+    发送next指令让机器人继续
+    """
+    try:
+        success, message = send_next_to_robot()
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TASK_011",
+                    "message": message
+                }
+            )
+        
+        return {
+            "success": True,
+            "message": message
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
+        )
+
+@router.get("/queue/status")
+async def get_queue_status_endpoint():
+    """
+    获取当前任务队列状态
+    """
+    try:
+        status = get_queue_status()
+        return {
+            "success": True,
+            "data": status
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Error getting queue status: {str(e)}"
+            }
+        )
+
+@router.get("/ros2/status")
+async def check_ros2_status():
+    """
+    检查ROS2桥接服务状态
+    """
+    try:
+        available, status = check_ros2_bridge_connection()
+        
+        return {
+            "success": True,
+            "data": {
+                "available": available,
+                "status": status,
+                "bridge_url": "http://localhost:8080"
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Error checking ROS2 status: {str(e)}"
+            }
+        )
+
 @router.get("/tasks/user/{user_id}")
 async def get_user_tasks(user_id: str, status: str = None):
     """获取指定用户的任务列表"""
@@ -191,3 +333,41 @@ async def get_user_pending_pickup_tasks(user_id: str):
         return {"tasks": tasks, "total": len(tasks)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取待取件任务失败: {str(e)}")
+
+@router.post("/start")
+async def start_task():
+    """
+    启动队列中的下一个任务
+    
+    手动启动最高优先级的待执行任务。
+    创建任务后，任务会进入对应优先级队列，但不会自动执行。
+    需要调用此接口来启动任务执行。
+    """
+    try:
+        success, message = start_task_execution()
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TASK_013",
+                    "message": message
+                }
+            )
+        
+        return {
+            "success": True,
+            "code": "TASK_000",
+            "message": message
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
+            }
+        )

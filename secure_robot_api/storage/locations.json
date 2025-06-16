@@ -3,96 +3,72 @@
     "location_id": "LOC101",
     "label": "经理室",
     "coordinates": {
-      "x": 1.94,
-      "y": -19.5
+      "x": 0.72,
+      "y": -19.52
     }
   },
   {
     "location_id": "LOC448",
     "label": "财务处",
     "coordinates": {
-      "x": 1.43,
-      "y": -11.2
+      "x": -3.35,
+      "y": -20.60
     }
   },
   {
     "location_id": "LOC896",
     "label": "大会议室",
     "coordinates": {
-      "x": 1.31,
-      "y": -8.64
+      "x": 1.78,
+      "y": -8.65
     }
   },
   {
     "location_id": "LOC478",
     "label": "等候处",
     "coordinates": {
-      "x": -10.81,
-      "y": -21.77
+      "x": -9.02,
+      "y": -20.49
     }
   },
   {
     "location_id": "LOC382",
     "label": "前台",
     "coordinates": {
-      "x": -10.09,
-      "y": -13.92
+      "x": -10.98,
+      "y": -16.93
     }
   },
   {
     "location_id": "LOC890",
     "label": "小会议室",
     "coordinates": {
-      "x": -3.34,
-      "y": -21.24
-    }
-  },
-  {
-    "location_id": "LOC676",
-    "label": "茶水间",
-    "coordinates": {
-      "x": -3.46,
-      "y": -9.69
+      "x": 1.12,
+      "y": -11.30
     }
   },
   {
     "location_id": "LOC547",
     "label": "休息室",
     "coordinates": {
-      "x": -3.46,
-      "y": -9.69
+      "x": -5.76,
+      "y": -4.99
     }
   },
   {
-    "location_id": "LOC376",
-    "label": "男厕所",
+    "location_id": "LOC917",
+    "label": "小办公区",
     "coordinates": {
-      "x": -9.82,
-      "y": -10.12
+      "x": -6.79,
+      "y": 7.63
     }
   },
   {
-    "location_id": "LOC948",
-    "label": "女厕所",
+    "location_id": "LOC851",
+    "label": "大办公区",
     "coordinates": {
-      "x": -9.67,
-      "y": -6.16
-    }
-  },
-  {
-    "location_id": "LOC916",
-    "label": "办公B",
-    "coordinates": {
-      "x": -7.42,
-      "y": 1.7
-    }
-  },
-  {
-    "location_id": "LOC850",
-    "label": "办公A",
-    "coordinates": {
-      "x": -2.77,
-      "y": 2.03
+      "x": -3.68,
+      "y": 7.67
     }
   }
 ]

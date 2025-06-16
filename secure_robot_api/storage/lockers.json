@@ -1,14 +1,22 @@
 [
   {
-    "locker_id": "LOCK4687",
-    "status": "available"
+    "locker_id": "LOCKER_001",
+    "status": "in_use"
   },
   {
-    "locker_id": "LOCK9465",
-    "status": "available"
+    "locker_id": "LOCKER_002",
+    "status": "in_use"
   },
   {
-    "locker_id": "LOCK2124",
+    "locker_id": "LOCKER_003",
+    "status": "in_use"
+  },
+  {
+    "locker_id": "LOCKER_004",
+    "status": "in_use"
+  },
+  {
+    "locker_id": "LOCKER_005",
     "status": "available"
   }
 ]
