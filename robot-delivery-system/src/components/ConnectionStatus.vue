@@ -61,8 +61,8 @@ const testConnection = async () => {
 
 onMounted(() => {
   testConnection()
-  // 每1秒自动检查一次连接
-  setInterval(testConnection, 1000)
+  // 每10秒自动检查一次连接（降低频率）
+  setInterval(testConnection, 10000)
 })
 </script>
 

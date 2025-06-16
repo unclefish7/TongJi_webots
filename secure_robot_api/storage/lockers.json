@@ -9,11 +9,11 @@
   },
   {
     "locker_id": "LOCKER_003",
-    "status": "in_use"
+    "status": "available"
   },
   {
     "locker_id": "LOCKER_004",
-    "status": "in_use"
+    "status": "available"
   },
   {
     "locker_id": "LOCKER_005",

@@ -190,9 +190,7 @@ def validate_task_creation(user_id: str, receiver: str, location_id: str, securi
     if not location:
         return False, TaskErrorCodes.LOCATION_NOT_FOUND, f"Target location '{location_id}' not found"
     
-    # 验证安全等级格式
-    if security_level not in ["L1", "L2", "L3"]:
-        return False, TaskErrorCodes.INVALID_SECURITY_LEVEL, f"Invalid security level '{security_level}'. Valid values: L1, L2, L3"
+    # 移除安全等级验证，现在接受任何security_level值
     
     return True, TaskErrorCodes.SUCCESS, ""
 
@@ -219,23 +217,14 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         log_task_creation("", user_id, receiver, location_id, security_level, "", False, error_code)
         return False, error_code, error_msg, None, None, None
     
-    # 事务性操作：认证消费和柜子分配
-    auth_consumed = False
+    # 简化操作：只需要柜子分配
     locker_allocated = False
     locker_id = None
     
     try:
-        # 步骤1：消费认证记录
-        auth_consumed = consume_auth(user_id, security_level)
-        if not auth_consumed:
-            log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.INSUFFICIENT_AUTH)
-            return False, TaskErrorCodes.INSUFFICIENT_AUTH, f"Insufficient authentication for security level {security_level}. Please authenticate first.", None, None, None
-        
-        # 步骤2：查找并分配可用柜子
+        # 步骤1：查找并分配可用柜子
         available_locker = get_available_locker()
         if not available_locker:
-            # 如果没有可用柜子，需要回滚认证消费
-            rollback_auth_consumption(user_id, security_level)
             log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.NO_AVAILABLE_LOCKERS)
             return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for task creation. Please try again later.", None, None, None
         
@@ -244,14 +233,12 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         # 分配柜子
         allocation_success, allocation_error = allocate_locker(locker_id)
         if not allocation_success:
-            # 如果柜子分配失败，需要回滚认证消费
-            rollback_auth_consumption(user_id, security_level)
             log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED)
             return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
         
         locker_allocated = True
         
-        # 步骤3：基于schema构建任务数据
+        # 步骤2：基于schema构建任务数据
         provided_values = {
             "description": description,
             "initiator": user_id,
@@ -266,17 +253,17 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         # 验证生成的任务数据
         is_valid, validation_error = validate_entity_against_schema("Task", task_data)
         if not is_valid:
-            # 如果验证失败，回滚所有操作
-            rollback_transaction(user_id, security_level, locker_id)
+            # 如果验证失败，只需要回滚柜子分配
+            release_locker(locker_id)
             log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.VALIDATION_FAILED)
             return False, TaskErrorCodes.VALIDATION_FAILED, f"Task data validation failed: {validation_error}", None, None, None
         
-        # 步骤4：保存任务到存储文件
+        # 步骤3：保存任务到存储文件
         try:
             save_task_to_storage(task_data)
         except Exception as save_error:
-            # 如果保存失败，回滚所有操作
-            rollback_transaction(user_id, security_level, locker_id)
+            # 如果保存失败，只需要回滚柜子分配
+            release_locker(locker_id)
             log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.SAVE_FAILED)
             return False, TaskErrorCodes.SAVE_FAILED, f"Failed to save task: {str(save_error)}", None, None, None
         
@@ -298,8 +285,9 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         return True, TaskErrorCodes.SUCCESS, success_message, task_id, task_data, locker_id
         
     except Exception as e:
-        # 如果发生任何未预期的异常，执行完整回滚
-        rollback_transaction(user_id, security_level, locker_id if locker_allocated else None)
+        # 如果发生任何未预期的异常，只需要回滚柜子分配
+        if locker_allocated and locker_id:
+            release_locker(locker_id)
         log_error(f"Unexpected error during task creation: {str(e)}", user_id)
         return False, TaskErrorCodes.SAVE_FAILED, f"Unexpected error during task creation: {str(e)}", None, None, None
 
@@ -319,52 +307,9 @@ def save_task_to_storage(task_data: Dict) -> None:
     # 保存回文件
     save_tasks(tasks)
 
-def rollback_auth_consumption(user_id: str, security_level: str) -> None:
-    """
-    回滚认证记录消费
-    
-    Args:
-        user_id: 用户ID
-        security_level: 安全等级
-    """
-    try:
-        from services.auth_service import auth_session_cache, LEVEL_ORDER
-        
-        if user_id not in auth_session_cache:
-            return
-        
-        user_records = auth_session_cache[user_id]
-        required_level_num = LEVEL_ORDER.get(security_level, 0)
-        
-        # 找到最近使用的满足要求的认证记录并恢复
-        for record in reversed(user_records):
-            if (record["used"] and 
-                LEVEL_ORDER.get(record["level"], 0) >= required_level_num):
-                record["used"] = False
-                break
-                
-    except Exception as e:
-        # 记录回滚失败，但不抛出异常
-        print(f"Warning: Failed to rollback authentication consumption for user {user_id}: {str(e)}")
-
-def rollback_transaction(user_id: str, security_level: str, locker_id: Optional[str]) -> None:
-    """
-    回滚整个事务（认证消费 + 柜子分配）
-    
-    Args:
-        user_id: 用户ID
-        security_level: 安全等级
-        locker_id: 柜子ID（如果已分配）
-    """
-    # 回滚认证消费
-    rollback_auth_consumption(user_id, security_level)
-    
-    # 回滚柜子分配
-    if locker_id:
-        try:
-            release_locker(locker_id)
-        except Exception as e:
-            print(f"Warning: Failed to rollback locker allocation for locker {locker_id}: {str(e)}")
+# 移除不再需要的认证相关函数
+# def rollback_auth_consumption(user_id: str, security_level: str) -> None:
+# def rollback_transaction(user_id: str, security_level: str, locker_id: Optional[str]) -> None:
 
 def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[str] = None) -> tuple[bool, str]:
     """
@@ -542,10 +487,10 @@ queue_lock = Lock()
 # 当前执行的任务状态
 current_execution = {
     "active": False,
-    "task_id": None,
-    "security_level": None,
-    "current_target_index": 0,
-    "total_targets": 0,
+    "current_queue_level": None,  # 当前执行的队列级别
+    "queue_tasks": [],           # 当前队列中的所有任务
+    "completed_count": 0,        # 已完成的任务数量
+    "total_count": 0,           # 总任务数量
     "waiting_for_next": False,
     "command_sent": False,  # 标记是否已发送命令
     "started": False        # 标记是否已开始执行
@@ -616,57 +561,59 @@ def start_task_execution() -> tuple[bool, str]:
     
     with queue_lock:
         if current_execution["active"]:
-            return False, "Another task is already running"
+            return False, "Another task queue is already running"
         
-        # 获取最高优先级任务
-        next_task = get_highest_priority_task()
-        if not next_task:
-            return False, "No tasks in queue"
+        # 获取最高优先级的非空队列
+        queue_level, queue_tasks = get_highest_priority_queue()
+        if not queue_level:
+            return False, "No tasks in any queue"
         
-        task_id = next_task["task_id"]
-        security_level = next_task["security_level"]
-        location_id = next_task["location_id"]
+        # 构建该队列中所有任务的目标点列表
+        targets = []
+        task_ids = []
+        for task in queue_tasks:
+            location = get_location_by_id(task["location_id"])
+            if location:
+                targets.append(location["label"])
+                task_ids.append(task["task_id"])
+            else:
+                log_task_operation(task["task_id"], "start_failed", "location_not_found")
         
-        # 获取位置信息
-        location = get_location_by_id(location_id)
-        if not location:
-            log_task_operation(task_id, "start_failed", "location_not_found")
-            return False, f"Location not found for task {task_id}"
-        
-        # 构建目标点列表（当前只有一个目标点）
-        targets = [location["label"]]
+        if not targets:
+            return False, f"No valid targets found for {queue_level} queue tasks"
         
         # 步骤1：发送多目标导航命令到ROS2
         nav_success, nav_error = send_multi_nav_command_with_retry(targets)
         if not nav_success:
-            # 如果发送失败，将任务放回队列
-            task_queues[security_level].appendleft(next_task)
-            log_task_operation(task_id, "start_failed", "ros2_nav_command_failed")
-            return False, f"Failed to send navigation command for task {task_id}: {nav_error}"
+            log_task_operation(f"{queue_level}_queue", "start_failed", "ros2_nav_command_failed")
+            return False, f"Failed to send navigation command for {queue_level} queue: {nav_error}"
         
         # 步骤2：立即发送第一个next指令启动机器人
         next_success, next_error = send_next_command_with_retry()
         if not next_success:
-            # 如果next指令发送失败，记录警告但继续执行（机器人可能仍会启动）
-            log_task_operation(task_id, "next_command_failed", "initial_start_command")
+            log_task_operation(f"{queue_level}_queue", "next_command_failed", "initial_start_command")
         
-        # 更新执行状态 - 任务已开始执行
+        # 更新执行状态 - 队列已开始执行
         current_execution.update({
             "active": True,
-            "task_id": task_id,
-            "security_level": security_level,
-            "current_target_index": 0,
-            "total_targets": len(targets),
-            "waiting_for_next": False,  # 不等待，已经发送了启动指令
+            "current_queue_level": queue_level,
+            "queue_tasks": queue_tasks.copy(),
+            "completed_count": 0,
+            "total_count": len(queue_tasks),
+            "waiting_for_next": False,
             "command_sent": True,
             "started": True
         })
         
-        # 更新任务状态
-        update_task_status(task_id, "delivering")
-        log_task_operation(task_id, "started_execution", f"{security_level}_manual_started")
+        # 清空已启动的队列
+        task_queues[queue_level].clear()
         
-        return True, f"Task {task_id} started successfully"
+        # 更新所有任务状态为delivering
+        for task in queue_tasks:
+            update_task_status(task["task_id"], "delivering")
+            log_task_operation(task["task_id"], "started_execution", f"{queue_level}_batch_started")
+        
+        return True, f"{queue_level} queue started successfully with {len(targets)} targets: {task_ids}"
 
 def send_multi_nav_command_with_retry(targets: List[str], max_retries: int = 3) -> tuple[bool, str]:
     """
@@ -798,6 +745,118 @@ def send_next_command() -> bool:
     success, _ = send_next_command_with_retry()
     return success
 
+def get_highest_priority_queue() -> tuple[Optional[str], List[Dict]]:
+    """
+    获取最高优先级的非空队列
+    
+    Returns:
+        tuple[Optional[str], List[Dict]]: (队列级别, 队列中的任务列表)
+    """
+    # 按优先级顺序检查队列
+    for level in ["L3", "L2", "L1"]:
+        if task_queues[level]:
+            return level, list(task_queues[level])
+    return None, []
+
+def start_next_queue() -> None:
+    """
+    启动下一个最高优先级队列（内部使用，队列完成后自动调用）
+    """
+    from services.log_service import log_task_operation
+    
+    if current_execution["active"]:
+        return
+    
+    # 获取最高优先级队列
+    queue_level, queue_tasks = get_highest_priority_queue()
+    if not queue_level:
+        return
+    
+    # 构建该队列中所有任务的目标点列表
+    targets = []
+    task_ids = []
+    for task in queue_tasks:
+        location = get_location_by_id(task["location_id"])
+        if location:
+            targets.append(location["label"])
+            task_ids.append(task["task_id"])
+        else:
+            log_task_operation(task["task_id"], "start_failed", "location_not_found")
+    
+    if not targets:
+        return
+    
+    # 步骤1：发送多目标导航命令到ROS2
+    nav_success = send_multi_nav_command(targets)
+    if not nav_success:
+        log_task_operation(f"{queue_level}_queue", "start_failed", "ros2_nav_command_failed")
+        return
+    
+    # 步骤2：立即发送第一个next指令启动机器人
+    next_success = send_next_command()
+    if not next_success:
+        log_task_operation(f"{queue_level}_queue", "next_command_failed", "initial_start_command")
+    
+    # 更新执行状态
+    current_execution.update({
+        "active": True,
+        "current_queue_level": queue_level,
+        "queue_tasks": queue_tasks.copy(),
+        "completed_count": 0,
+        "total_count": len(queue_tasks),
+        "waiting_for_next": False,
+        "command_sent": True,
+        "started": True
+    })
+    
+    # 清空已启动的队列
+    task_queues[queue_level].clear()
+    
+    # 更新所有任务状态
+    for task in queue_tasks:
+        update_task_status(task["task_id"], "delivering")
+        log_task_operation(task["task_id"], "started_execution", f"{queue_level}_auto_batch_started")
+
+def complete_current_task() -> None:
+    """
+    完成当前任务（机器人到达一个目标点时调用）
+    """
+    from services.log_service import log_task_operation
+    
+    if not current_execution["active"]:
+        return
+    
+    current_execution["completed_count"] += 1
+    
+    # 获取当前完成的任务
+    if current_execution["completed_count"] <= len(current_execution["queue_tasks"]):
+        completed_task = current_execution["queue_tasks"][current_execution["completed_count"] - 1]
+        task_id = completed_task["task_id"]
+        
+        # 完成单个任务
+        complete_task(task_id)
+        log_task_operation(task_id, "completed_execution", f"task_{current_execution['completed_count']}")
+    
+    # 检查是否完成了当前队列的所有任务
+    if current_execution["completed_count"] >= current_execution["total_count"]:
+        # 当前队列完成，重置执行状态
+        queue_level = current_execution["current_queue_level"]
+        current_execution.update({
+            "active": False,
+            "current_queue_level": None,
+            "queue_tasks": [],
+            "completed_count": 0,
+            "total_count": 0,
+            "waiting_for_next": False,
+            "command_sent": False,
+            "started": False
+        })
+        
+        log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"total_{current_execution['total_count']}")
+        
+        # 启动下一个优先级队列
+        start_next_queue()
+
 def remove_task_from_queue(task_id: str) -> tuple[bool, str]:
     """
     从队列中移除指定任务
@@ -821,122 +880,65 @@ def remove_task_from_queue(task_id: str) -> tuple[bool, str]:
                     # 更新任务状态为取消
                     update_task_status(task_id, "failed")
                     
-                    # 如果移除的是当前正在执行的任务
-                    if current_execution["task_id"] == task_id:
-                        current_execution["active"] = False
-                        current_execution["task_id"] = None
-                        current_execution["security_level"] = None
-                        current_execution["waiting_for_next"] = False
+                    # 如果移除的任务在当前执行的队列中
+                    if (current_execution["active"] and 
+                        current_execution["current_queue_level"] == level):
                         
-                        # 启动下一个任务
-                        start_next_task()
+                        # 从当前执行队列中移除该任务
+                        current_execution["queue_tasks"] = [
+                            t for t in current_execution["queue_tasks"] 
+                            if t.get("task_id") != task_id
+                        ]
+                        current_execution["total_count"] = len(current_execution["queue_tasks"])
+                        
+                        # 如果当前执行队列变空，停止执行并启动下一个队列
+                        if current_execution["total_count"] == 0:
+                            current_execution.update({
+                                "active": False,
+                                "current_queue_level": None,
+                                "queue_tasks": [],
+                                "completed_count": 0,
+                                "total_count": 0,
+                                "waiting_for_next": False,
+                                "command_sent": False,
+                                "started": False
+                            })
+                            start_next_queue()
                     else:
-                        # 重新发送当前优先级的队列（不包含已移除的任务）
-                        refresh_current_queue()
+                        # 如果移除的是待执行队列中的任务，重新发布该队列
+                        if task_queues[level]:  # 队列还有其他任务
+                            republish_queue_targets(level)
                     
                     log_task_operation(task_id, "removed_from_queue", level)
                     return True, f"Task {task_id} removed from {level} queue"
         
         return False, f"Task {task_id} not found in any queue"
 
-def get_highest_priority_task() -> Optional[Dict]:
+def republish_queue_targets(queue_level: str) -> None:
     """
-    获取最高优先级的任务
+    重新发布指定队列的所有目标点到ROS2
     
-    Returns:
-        最高优先级的任务，如果没有则返回None
-    """
-    # 按优先级顺序检查队列
-    for level in ["L3", "L2", "L1"]:
-        if task_queues[level]:
-            return task_queues[level].popleft()
-    return None
-
-def start_next_task() -> None:
-    """
-    启动下一个最高优先级任务（内部使用，任务完成后自动调用）
+    Args:
+        queue_level: 队列级别 (L1/L2/L3)
     """
     from services.log_service import log_task_operation
     
-    if current_execution["active"]:
+    if not task_queues[queue_level]:
         return
     
-    # 获取最高优先级任务
-    next_task = get_highest_priority_task()
-    if not next_task:
-        return
+    # 构建该队列中所有任务的目标点列表
+    targets = []
+    for task in task_queues[queue_level]:
+        location = get_location_by_id(task["location_id"])
+        if location:
+            targets.append(location["label"])
     
-    task_id = next_task["task_id"]
-    security_level = next_task["security_level"]
-    location_id = next_task["location_id"]
-    
-    # 获取位置信息
-    location = get_location_by_id(location_id)
-    if not location:
-        log_task_operation(task_id, "start_failed", "location_not_found")
-        return
-    
-    # 构建目标点列表（当前只有一个目标点）
-    targets = [location["label"]]
-    
-    # 步骤1：发送多目标导航命令到ROS2
-    nav_success = send_multi_nav_command(targets)
-    if not nav_success:
-        # 如果发送失败，将任务放回队列
-        task_queues[security_level].appendleft(next_task)
-        log_task_operation(task_id, "start_failed", "ros2_nav_command_failed")
-        return
-    
-    # 步骤2：立即发送第一个next指令启动机器人
-    next_success = send_next_command()
-    if not next_success:
-        # 如果next指令发送失败，记录警告但继续执行（机器人可能仍会启动）
-        log_task_operation(task_id, "next_command_failed", "initial_start_command")
-    
-    # 更新执行状态 - 任务已开始执行
-    current_execution.update({
-        "active": True,
-        "task_id": task_id,
-        "security_level": security_level,
-        "current_target_index": 0,
-        "total_targets": len(targets),
-        "waiting_for_next": False,  # 不等待，已经发送了启动指令
-        "command_sent": True,
-        "started": True
-    })
-    
-    # 更新任务状态
-    update_task_status(task_id, "delivering")
-    log_task_operation(task_id, "started_execution", f"{security_level}_auto_started")
-
-def complete_current_task() -> None:
-    """
-    完成当前任务
-    """
-    from services.log_service import log_task_operation
-    
-    if current_execution["active"]:
-        task_id = current_execution["task_id"]
-        
-        # 完成任务
-        complete_task(task_id)
-        
-        # 重置执行状态
-        current_execution.update({
-            "active": False,
-            "task_id": None,
-            "security_level": None,
-            "current_target_index": 0,
-            "total_targets": 0,
-            "waiting_for_next": False,
-            "command_sent": False,
-            "started": False
-        })
-        
-        log_task_operation(task_id, "completed_execution", "")
-        
-        # 启动下一个任务
-        start_next_task()
+    if targets:
+        success = send_multi_nav_command(targets)
+        if success:
+            log_task_operation(f"{queue_level}_queue", "republished_targets", f"count_{len(targets)}")
+        else:
+            log_task_operation(f"{queue_level}_queue", "republish_failed", f"count_{len(targets)}")
 
 def send_next_to_robot() -> tuple[bool, str]:
     """
@@ -946,7 +948,7 @@ def send_next_to_robot() -> tuple[bool, str]:
         tuple[bool, str]: (是否成功, 消息)
     """
     if not current_execution["active"]:
-        return False, "No active task"
+        return False, "No active task queue"
     
     if not current_execution["waiting_for_next"]:
         return False, "Robot is not waiting for next command"
@@ -960,29 +962,12 @@ def send_next_to_robot() -> tuple[bool, str]:
     success, error = send_next_command_with_retry()
     if success:
         current_execution["waiting_for_next"] = False
-        task_id = current_execution["task_id"]
-        log_task_operation(task_id, "next_command_sent", f"target_{current_execution['current_target_index']}")
-        return True, f"Next command sent for task {task_id}, continuing to next target"
+        queue_level = current_execution["current_queue_level"]
+        task_count = current_execution["completed_count"] + 1
+        # log_task_operation(f"{queue_level}_queue", "next_command_sent", f"target_{task_count}")
+        return True, f"Next command sent for {queue_level} queue, continuing to target {task_count}"
     else:
         return False, f"Failed to send next command to robot: {error}"
-
-def refresh_current_queue() -> None:
-    """
-    重新发送当前优先级队列到ROS2（用于任务取消后的队列更新）
-    """
-    # 找到当前最高优先级的非空队列
-    current_targets = []
-    for level in ["L3", "L2", "L1"]:
-        if task_queues[level]:
-            # 收集该级别所有任务的目标点
-            for task in task_queues[level]:
-                location = get_location_by_id(task["location_id"])
-                if location:
-                    current_targets.append(location["label"])
-            break
-    
-    if current_targets:
-        send_multi_nav_command(current_targets)
 
 def handle_robot_arrival() -> tuple[bool, str]:
     """
@@ -994,39 +979,100 @@ def handle_robot_arrival() -> tuple[bool, str]:
     from services.log_service import log_task_operation
     
     if not current_execution["active"]:
-        return False, "No active task"
+        return False, "No active task queue"
     
-    task_id = current_execution["task_id"]
+    queue_level = current_execution["current_queue_level"]
+    current_task_index = current_execution["completed_count"]
     
-    # 检查是否完成了所有目标点
-    if current_execution["current_target_index"] >= current_execution["total_targets"] - 1:
-        # 任务完成
+    # 检查是否完成了当前队列的所有任务
+    if current_task_index >= current_execution["total_count"]:
+        # 当前队列所有任务完成
         complete_current_task()
-        return True, f"Task {task_id} completed successfully"
+        return True, f"{queue_level} queue completed successfully"
     else:
-        # 还有更多目标点，等待next指令
+        # 还有更多任务，等待next指令
         current_execution["waiting_for_next"] = True
-        current_execution["current_target_index"] += 1
         
-        log_task_operation(task_id, "arrived_at_intermediate", str(current_execution["current_target_index"]))
-        return True, f"Robot arrived at target {current_execution['current_target_index']}, waiting for next command"
+        # 完成当前任务
+        complete_current_task()
+        
+        log_task_operation(f"{queue_level}_queue", "arrived_at_target", f"task_{current_task_index + 1}")
+        return True, f"Robot arrived at target {current_task_index + 1}/{current_execution['total_count']}, waiting for next command"
 
 def get_queue_status() -> Dict:
     """
     获取当前队列状态
     
     Returns:
-        队列状态信息
+        队列状态信息，包含任务详情
     """
     with queue_lock:
         # 检查ROS2桥接状态
         bridge_available, bridge_status = check_ros2_bridge_connection()
         
+        # 获取所有队列中的任务详情
+        queue_details = {}
+        current_executing_task = None
+        
+        for level in task_queues:
+            queue_details[level] = []
+            for task_id in task_queues[level]:
+                task = get_task_by_id(task_id)
+                if task:
+                    # 添加位置标签信息
+                    location = get_location_by_id(task.get('location_id', ''))
+                    location_label = location.get('label', task.get('location_id', '未知位置')) if location else task.get('location_id', '未知位置')
+                    
+                    task_detail = {
+                        "task_id": task["task_id"],
+                        "user_id": task["user_id"],
+                        "receiver": task["receiver"],
+                        "location_id": task["location_id"],
+                        "location_label": location_label,
+                        "security_level": task["security_level"],
+                        "description": task.get("description", ""),
+                        "status": task["status"],
+                        "created_at": task["created_at"],
+                        "locker_id": task.get("locker_id", "")
+                    }
+                    queue_details[level].append(task_detail)
+        
+        # 如果有正在执行的任务，获取其详情
+        if current_execution["active"] and current_execution.get("current_task_id"):
+            executing_task = get_task_by_id(current_execution["current_task_id"])
+            if executing_task:
+                location = get_location_by_id(executing_task.get('location_id', ''))
+                location_label = location.get('label', executing_task.get('location_id', '未知位置')) if location else executing_task.get('location_id', '未知位置')
+                
+                current_executing_task = {
+                    "task_id": executing_task["task_id"],
+                    "user_id": executing_task["user_id"],
+                    "receiver": executing_task["receiver"],
+                    "location_id": executing_task["location_id"],
+                    "location_label": location_label,
+                    "security_level": executing_task["security_level"],
+                    "description": executing_task.get("description", ""),
+                    "status": "executing",
+                    "progress": f"{current_execution['completed_count']}/{current_execution['total_count']}",
+                    "locker_id": executing_task.get("locker_id", "")
+                }
+        
         status = {
             "queues": {
                 level: len(queue) for level, queue in task_queues.items()
             },
-            "current_execution": current_execution.copy(),
+            "queue_details": queue_details,
+            "current_executing_task": current_executing_task,
+            "current_execution": {
+                "active": current_execution["active"],
+                "current_queue_level": current_execution["current_queue_level"],
+                "completed_count": current_execution["completed_count"],
+                "total_count": current_execution["total_count"],
+                "waiting_for_next": current_execution["waiting_for_next"],
+                "command_sent": current_execution["command_sent"],
+                "started": current_execution["started"],
+                "progress": f"{current_execution['completed_count']}/{current_execution['total_count']}" if current_execution["active"] else "0/0"
+            },
             "ros2_bridge": {
                 "available": bridge_available,
                 "status": bridge_status,

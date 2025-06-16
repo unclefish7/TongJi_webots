@@ -93,6 +93,9 @@
 
         <!-- 机器人任务队列 -->
         <RobotTaskQueue />
+
+        <!-- 智能柜门状态 -->
+        <LockerStatusPanel />
       </el-aside>
 
       <!-- 主要内容区域 -->
@@ -142,6 +145,7 @@ import {
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
 import EmbeddedMapViewer from '@/components/EmbeddedMapViewer.vue'
 import RobotTaskQueue from '@/components/RobotTaskQueue.vue'
+import LockerStatusPanel from '@/components/LockerStatusPanel.vue'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 
 const robotStore = useRobotStore()

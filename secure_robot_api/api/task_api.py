@@ -37,8 +37,6 @@ async def create_task_endpoint(request: TaskCreateRequest):
     - TASK_001: 发起人不存在
     - TASK_002: 接收人不存在
     - TASK_003: 目标位置不存在
-    - TASK_004: 安全等级无效
-    - TASK_005: 认证不足
     - TASK_006: 无可用柜子
     - TASK_007: 柜子分配失败
     - TASK_008: 数据验证失败
@@ -59,8 +57,6 @@ async def create_task_endpoint(request: TaskCreateRequest):
                 TaskErrorCodes.INITIATOR_NOT_FOUND: 404,
                 TaskErrorCodes.RECEIVER_NOT_FOUND: 404,
                 TaskErrorCodes.LOCATION_NOT_FOUND: 404,
-                TaskErrorCodes.INVALID_SECURITY_LEVEL: 400,
-                TaskErrorCodes.INSUFFICIENT_AUTH: 403,
                 TaskErrorCodes.NO_AVAILABLE_LOCKERS: 503,
                 TaskErrorCodes.LOCKER_ALLOCATION_FAILED: 500,
                 TaskErrorCodes.VALIDATION_FAILED: 400,

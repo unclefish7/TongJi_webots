@@ -1,7 +1,7 @@
 [
   {
-    "task_id": "T20250616124649F3K85J",
-    "description": "test1",
+    "task_id": "T20250616181721VIH7Y8",
+    "description": "用户呼叫机器人到LOC101",
     "initiator": "EMP7064",
     "receiver": "EMP7064",
     "location_id": "LOC101",
@@ -9,82 +9,22 @@
     "security_level": "L1",
     "status": "pending",
     "timestamps": {
-      "created": "2025-06-16T12:46:49.033781",
+      "created": "2025-06-16T18:17:21.710129",
       "accepted": null,
       "delivered": null
     }
   },
   {
-    "task_id": "T20250616124703N13N3M",
-    "description": "test2",
+    "task_id": "T20250616182508GBJ94P",
+    "description": "用户呼叫机器人到LOC101",
     "initiator": "EMP7064",
     "receiver": "EMP7064",
-    "location_id": "LOC896",
+    "location_id": "LOC101",
     "locker_id": "LOCKER_002",
-    "security_level": "L1",
-    "status": "pending",
-    "timestamps": {
-      "created": "2025-06-16T12:47:03.582265",
-      "accepted": null,
-      "delivered": null
-    }
-  },
-  {
-    "task_id": "T20250616130554QECMC3",
-    "description": "1",
-    "initiator": "EMP7064",
-    "receiver": "EMP7064",
-    "location_id": "LOC101",
-    "locker_id": "LOCKER_001",
     "security_level": "L1",
     "status": "delivering",
     "timestamps": {
-      "created": "2025-06-16T13:05:54.843870",
-      "accepted": null,
-      "delivered": null
-    }
-  },
-  {
-    "task_id": "T20250616130607ZA8NHR",
-    "description": "2",
-    "initiator": "EMP7064",
-    "receiver": "EMP7064",
-    "location_id": "LOC896",
-    "locker_id": "LOCKER_002",
-    "security_level": "L1",
-    "status": "pending",
-    "timestamps": {
-      "created": "2025-06-16T13:06:07.890734",
-      "accepted": null,
-      "delivered": null
-    }
-  },
-  {
-    "task_id": "T20250616131316C6YNAO",
-    "description": "2",
-    "initiator": "EMP7064",
-    "receiver": "EMP7064",
-    "location_id": "LOC896",
-    "locker_id": "LOCKER_003",
-    "security_level": "L1",
-    "status": "pending",
-    "timestamps": {
-      "created": "2025-06-16T13:13:16.305599",
-      "accepted": null,
-      "delivered": null
-    }
-  },
-  {
-    "task_id": "T20250616131345EJGHUQ",
-    "description": "3",
-    "initiator": "EMP7064",
-    "receiver": "EMP7064",
-    "location_id": "LOC448",
-    "locker_id": "LOCKER_004",
-    "security_level": "L1",
-    "status": "pending",
-    "timestamps": {
-      "created": "2025-06-16T13:13:45.970404",
+      "created": "2025-06-16T18:25:08.069655",
       "accepted": null,
       "delivered": null
     }

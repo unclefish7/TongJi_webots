@@ -1,214 +1,110 @@
 [
   {
-    "log_id": "LOG20250616130349PVJJQZ",
-    "log_type": "auth",
-    "related_user": "EMP7064",
-    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
-    "auth_mode": [
-      "ID"
-    ],
-    "result": "success",
-    "timestamp": "2025-06-16T13:03:49.975825"
-  },
-  {
-    "log_id": "LOG20250616130352OOOAG2",
-    "log_type": "auth",
-    "related_user": "EMP7064",
-    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
-    "auth_mode": [
-      "ID"
-    ],
-    "result": "success",
-    "timestamp": "2025-06-16T13:03:52.104443"
-  },
-  {
-    "log_id": "LOG20250616130352V0IAGX",
-    "log_type": "auth",
-    "related_user": "EMP7064",
-    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
-    "auth_mode": [
-      "ID"
-    ],
-    "result": "success",
-    "timestamp": "2025-06-16T13:03:52.287248"
-  },
-  {
-    "log_id": "LOG202506161303522RRMUM",
-    "log_type": "auth",
-    "related_user": "EMP7064",
-    "message": "User EMP7064 authentication attempt for level L1, verified at level L1",
-    "auth_mode": [
-      "ID"
-    ],
-    "result": "success",
-    "timestamp": "2025-06-16T13:03:52.469328"
-  },
-  {
-    "log_id": "LOG20250616130407VN7GMB",
+    "log_id": "LOG20250616175629ANHM3N",
     "log_type": "delivery",
     "related_user": "EMP7064",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC896 failed with code TASK_006",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at 经理室 failed with code TASK_003",
     "result": "failed",
-    "timestamp": "2025-06-16T13:04:07.434761"
+    "timestamp": "2025-06-16T17:56:29.188550"
   },
   {
-    "log_id": "LOG20250616130422JXNOEK",
+    "log_id": "LOG20250616175656OMO5MG",
     "log_type": "delivery",
     "related_user": "EMP7064",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC101 failed with code TASK_006",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at 经理室 failed with code TASK_003",
     "result": "failed",
-    "timestamp": "2025-06-16T13:04:22.295855"
+    "timestamp": "2025-06-16T17:56:56.430833"
   },
   {
-    "log_id": "LOG202506161305548YP9T9",
+    "log_id": "LOG202506161758093JUOOA",
+    "log_type": "delivery",
+    "related_user": "EMP7064",
+    "message": "Task creation attempt by EMP7064 for 未指定 at 前台 failed with code TASK_002",
+    "result": "failed",
+    "timestamp": "2025-06-16T17:58:09.925711"
+  },
+  {
+    "log_id": "LOG202506161801050T18BQ",
+    "log_type": "delivery",
+    "related_user": "EMP7064",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at 经理室 failed with code TASK_003",
+    "result": "failed",
+    "timestamp": "2025-06-16T18:01:05.220042"
+  },
+  {
+    "log_id": "LOG20250616181721WI8K42",
     "log_type": "system",
     "related_locker": "LOCKER_001",
     "message": "Locker LOCKER_001 allocated",
     "result": "success",
-    "timestamp": "2025-06-16T13:05:54.842843"
+    "timestamp": "2025-06-16T18:17:21.709425"
   },
   {
-    "log_id": "LOG202506161305540M6T3W",
+    "log_id": "LOG202506161817219MGVK0",
     "log_type": "delivery",
     "related_user": "EMP7064",
-    "related_task": "T20250616130554QECMC3",
+    "related_task": "T20250616181721VIH7Y8",
     "related_locker": "LOCKER_001",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC101, task T20250616130554QECMC3 created with locker LOCKER_001",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC101, task T20250616181721VIH7Y8 created with locker LOCKER_001",
     "result": "success",
-    "timestamp": "2025-06-16T13:05:54.844485"
+    "timestamp": "2025-06-16T18:17:21.710477"
   },
   {
-    "log_id": "LOG202506161305543DGND6",
+    "log_id": "LOG202506161817211K9L04",
     "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 status changed from pending to pending",
+    "related_task": "T20250616181721VIH7Y8",
+    "message": "Task T20250616181721VIH7Y8 status changed from pending to pending",
     "result": "success",
-    "timestamp": "2025-06-16T13:05:54.845417"
+    "timestamp": "2025-06-16T18:17:21.711304"
   },
   {
-    "log_id": "LOG20250616130607GFC2GS",
+    "log_id": "LOG20250616182508M0V0D4",
     "log_type": "system",
     "related_locker": "LOCKER_002",
     "message": "Locker LOCKER_002 allocated",
     "result": "success",
-    "timestamp": "2025-06-16T13:06:07.890099"
+    "timestamp": "2025-06-16T18:25:08.068889"
   },
   {
-    "log_id": "LOG20250616130607CLADTB",
+    "log_id": "LOG20250616182508FMP7VE",
     "log_type": "delivery",
     "related_user": "EMP7064",
-    "related_task": "T20250616130607ZA8NHR",
+    "related_task": "T20250616182508GBJ94P",
     "related_locker": "LOCKER_002",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC896, task T20250616130607ZA8NHR created with locker LOCKER_002",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC101, task T20250616182508GBJ94P created with locker LOCKER_002",
     "result": "success",
-    "timestamp": "2025-06-16T13:06:07.891063"
+    "timestamp": "2025-06-16T18:25:08.069920"
   },
   {
-    "log_id": "LOG20250616130607JVITQ5",
+    "log_id": "LOG20250616182508LDWX2F",
     "log_type": "delivery",
-    "related_task": "T20250616130607ZA8NHR",
-    "message": "Task T20250616130607ZA8NHR status changed from pending to pending",
+    "related_task": "T20250616182508GBJ94P",
+    "message": "Task T20250616182508GBJ94P status changed from pending to pending",
     "result": "success",
-    "timestamp": "2025-06-16T13:06:07.891984"
+    "timestamp": "2025-06-16T18:25:08.070851"
   },
   {
-    "log_id": "LOG20250616130614HN7RWA",
+    "log_id": "LOG20250616182515YWUG90",
     "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 operation: start_failed - ros2_nav_command_failed",
+    "related_task": "T20250616182508GBJ94P",
+    "message": "Task T20250616182508GBJ94P status changed from pending to delivering",
     "result": "success",
-    "timestamp": "2025-06-16T13:06:14.282736"
+    "timestamp": "2025-06-16T18:25:15.479949"
   },
   {
-    "log_id": "LOG202506161306353J66DR",
+    "log_id": "LOG20250616182515PAN76T",
     "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 operation: start_failed - ros2_nav_command_failed",
+    "related_task": "T20250616182508GBJ94P",
+    "message": "Task T20250616182508GBJ94P operation: started_execution - L1_batch_started",
     "result": "success",
-    "timestamp": "2025-06-16T13:06:35.833279"
+    "timestamp": "2025-06-16T18:25:15.480590"
   },
   {
-    "log_id": "LOG20250616130657X4NH9R",
-    "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 operation: start_failed - ros2_nav_command_failed",
-    "result": "success",
-    "timestamp": "2025-06-16T13:06:57.778079"
-  },
-  {
-    "log_id": "LOG20250616131229ZNUGAX",
-    "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 status changed from pending to delivering",
-    "result": "success",
-    "timestamp": "2025-06-16T13:12:29.381275"
-  },
-  {
-    "log_id": "LOG20250616131229BW37CG",
-    "log_type": "delivery",
-    "related_task": "T20250616130554QECMC3",
-    "message": "Task T20250616130554QECMC3 operation: started_execution - L1_manual_started",
-    "result": "success",
-    "timestamp": "2025-06-16T13:12:29.382165"
-  },
-  {
-    "log_id": "LOG20250616131316NMHFJX",
-    "log_type": "system",
-    "related_locker": "LOCKER_003",
-    "message": "Locker LOCKER_003 allocated",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:16.304727"
-  },
-  {
-    "log_id": "LOG20250616131316BMMSUM",
+    "log_id": "LOG20250616182600SZW1LU",
     "log_type": "delivery",
     "related_user": "EMP7064",
-    "related_task": "T20250616131316C6YNAO",
-    "related_locker": "LOCKER_003",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC896, task T20250616131316C6YNAO created with locker LOCKER_003",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:16.305950"
-  },
-  {
-    "log_id": "LOG20250616131316MN8AWG",
-    "log_type": "delivery",
-    "related_task": "T20250616131316C6YNAO",
-    "message": "Task T20250616131316C6YNAO status changed from pending to pending",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:16.306842"
-  },
-  {
-    "log_id": "LOG20250616131330YUZXKJ",
-    "log_type": "delivery",
-    "related_user": "EMP7064",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at 财务处 failed with code TASK_003",
+    "message": "Task creation attempt by EMP7064 for 未指定 at LOC448 failed with code TASK_002",
     "result": "failed",
-    "timestamp": "2025-06-16T13:13:30.215732"
-  },
-  {
-    "log_id": "LOG20250616131345OJK99L",
-    "log_type": "system",
-    "related_locker": "LOCKER_004",
-    "message": "Locker LOCKER_004 allocated",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:45.969460"
-  },
-  {
-    "log_id": "LOG20250616131345L7MA32",
-    "log_type": "delivery",
-    "related_user": "EMP7064",
-    "related_task": "T20250616131345EJGHUQ",
-    "related_locker": "LOCKER_004",
-    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC448, task T20250616131345EJGHUQ created with locker LOCKER_004",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:45.970761"
-  },
-  {
-    "log_id": "LOG20250616131345TM72V4",
-    "log_type": "delivery",
-    "related_task": "T20250616131345EJGHUQ",
-    "message": "Task T20250616131345EJGHUQ status changed from pending to pending",
-    "result": "success",
-    "timestamp": "2025-06-16T13:13:45.972100"
+    "timestamp": "2025-06-16T18:26:00.247045"
   }
 ]
