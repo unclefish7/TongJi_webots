@@ -210,5 +210,73 @@
     "message": "Task T20250616131345EJGHUQ status changed from pending to pending",
     "result": "success",
     "timestamp": "2025-06-16T13:13:45.972100"
+  },
+  {
+    "log_id": "LOG20250616151456WADKZS",
+    "log_type": "system",
+    "related_locker": "LOCKER_005",
+    "message": "Locker LOCKER_005 allocated",
+    "result": "success",
+    "timestamp": "2025-06-16T15:14:56.137048"
+  },
+  {
+    "log_id": "LOG202506161514566916F1",
+    "log_type": "delivery",
+    "related_user": "EMP7064",
+    "related_task": "T20250616151456QUVZ16",
+    "related_locker": "LOCKER_005",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC101, task T20250616151456QUVZ16 created with locker LOCKER_005",
+    "result": "success",
+    "timestamp": "2025-06-16T15:14:56.138294"
+  },
+  {
+    "log_id": "LOG20250616151456HW13W2",
+    "log_type": "delivery",
+    "related_task": "T20250616151456QUVZ16",
+    "message": "Task T20250616151456QUVZ16 status changed from pending to pending",
+    "result": "success",
+    "timestamp": "2025-06-16T15:14:56.139228"
+  },
+  {
+    "log_id": "LOG20250616151528RBS8PU",
+    "log_type": "system",
+    "related_locker": "LOCKER_001",
+    "message": "Locker LOCKER_001 allocated",
+    "result": "success",
+    "timestamp": "2025-06-16T15:15:28.924833"
+  },
+  {
+    "log_id": "LOG20250616151528EJCF91",
+    "log_type": "delivery",
+    "related_user": "EMP7064",
+    "related_task": "T202506161515283HOZD0",
+    "related_locker": "LOCKER_001",
+    "message": "Task creation attempt by EMP7064 for EMP7064 at LOC448, task T202506161515283HOZD0 created with locker LOCKER_001",
+    "result": "success",
+    "timestamp": "2025-06-16T15:15:28.925994"
+  },
+  {
+    "log_id": "LOG20250616151528X7J9FO",
+    "log_type": "delivery",
+    "related_task": "T202506161515283HOZD0",
+    "message": "Task T202506161515283HOZD0 status changed from pending to pending",
+    "result": "success",
+    "timestamp": "2025-06-16T15:15:28.926927"
+  },
+  {
+    "log_id": "LOG2025061615153492X0U7",
+    "log_type": "delivery",
+    "related_task": "T20250616151456QUVZ16",
+    "message": "Task T20250616151456QUVZ16 status changed from pending to delivering",
+    "result": "success",
+    "timestamp": "2025-06-16T15:15:34.420337"
+  },
+  {
+    "log_id": "LOG20250616151534XMGO25",
+    "log_type": "delivery",
+    "related_task": "T20250616151456QUVZ16",
+    "message": "Task T20250616151456QUVZ16 operation: started_execution - L1_manual_started",
+    "result": "success",
+    "timestamp": "2025-06-16T15:15:34.421300"
   }
 ]
