@@ -360,12 +360,12 @@ export class RobotService {
    * 启动队列处理器
    */
   private startQueueProcessor(): void {
-    // 每5秒检查一次队列
+    // 每10秒检查一次队列（降低频率）
     setInterval(() => {
       if (this.robotStatus === 'idle' && this.taskQueue.length > 0) {
         this.executeNextTask()
       }
-    }, 5000)
+    }, 10000)
   }
 
   /**

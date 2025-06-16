@@ -208,8 +208,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
 import { authService } from '@/services/authService'
-import { mapService } from '@/services/mapService'
-import { robotService } from '@/services/robotService'
+import { locationApiService } from '@/services/locationApiService'
+import { taskApiService } from '@/services/taskApiService'
 import { Phone, Bell, User, Grid } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -233,15 +233,16 @@ const callRules = {
 // 位置选项（从地图服务获取）
 const locationOptions = ref<any[]>([])
 
-// 初始化地图数据
+// 初始化地点数据
 onMounted(async () => {
   try {
-    const locations = await mapService.getAllLocations()
+    const locations = await locationApiService.getAllLocations()
     locationOptions.value = locations.map((location: any) => ({
-      value: location.name,
-      label: location.name,
+      value: location.location_id,  // 使用 location_id 作为值
+      label: location.label,        // 使用 label 作为显示文本
       location: location
-    }))  } catch (error) {
+    }))
+  } catch (error) {
     console.error('获取地点数据失败:', error)
     ElMessage.error('获取地点数据失败')
   }
@@ -324,20 +325,40 @@ const submitCall = async () => {
       return
     }
 
-    selectedRobotName.value = selectedRobot.name    // 添加呼叫任务到机器人队列
-    await robotService.addCallTask(user.user_id, callForm.location)
+    selectedRobotName.value = selectedRobot.name
 
-    // 计算预计到达时间
-    const arrivalMinutes = callForm.priority === 'urgent' ? 3 : 5
-    const arrivalTime = new Date()
-    arrivalTime.setMinutes(arrivalTime.getMinutes() + arrivalMinutes)
-    estimatedArrival.value = arrivalTime.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    // 创建呼叫任务
+    try {
+      const taskRequest = {
+        user_id: user.user_id,
+        receiver: user.user_id, // 呼叫任务的接收人就是发起人
+        location_id: callForm.location,
+        security_level: 'L1' as 'L1' | 'L2' | 'L3', // 呼叫任务默认L1级别
+        description: `用户呼叫机器人到${callForm.location}`
+      }
 
-    showSuccessDialog.value = true
-    ElMessage.success('呼叫发送成功')
+      const result = await taskApiService.createTask(taskRequest)
+      
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+
+      // 计算预计到达时间
+      const arrivalMinutes = callForm.priority === 'urgent' ? 3 : 5
+      const arrivalTime = new Date()
+      arrivalTime.setMinutes(arrivalTime.getMinutes() + arrivalMinutes)
+      estimatedArrival.value = arrivalTime.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      showSuccessDialog.value = true
+      ElMessage.success('呼叫任务创建成功')
+    } catch (taskError) {
+      console.error('创建呼叫任务失败:', taskError)
+      ElMessage.error('创建呼叫任务失败，请重试')
+      return
+    }
   } catch (error) {
     console.error('呼叫失败:', error)
     ElMessage.error('呼叫失败，请重试')

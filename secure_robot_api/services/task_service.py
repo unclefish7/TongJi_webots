@@ -1004,16 +1004,65 @@ def get_queue_status() -> Dict:
     获取当前队列状态
     
     Returns:
-        队列状态信息
+        队列状态信息，包含任务详情
     """
     with queue_lock:
         # 检查ROS2桥接状态
         bridge_available, bridge_status = check_ros2_bridge_connection()
         
+        # 获取所有队列中的任务详情
+        queue_details = {}
+        current_executing_task = None
+        
+        for level in task_queues:
+            queue_details[level] = []
+            for task_id in task_queues[level]:
+                task = get_task_by_id(task_id)
+                if task:
+                    # 添加位置标签信息
+                    location = get_location_by_id(task.get('location_id', ''))
+                    location_label = location.get('label', task.get('location_id', '未知位置')) if location else task.get('location_id', '未知位置')
+                    
+                    task_detail = {
+                        "task_id": task["task_id"],
+                        "user_id": task["user_id"],
+                        "receiver": task["receiver"],
+                        "location_id": task["location_id"],
+                        "location_label": location_label,
+                        "security_level": task["security_level"],
+                        "description": task.get("description", ""),
+                        "status": task["status"],
+                        "created_at": task["created_at"],
+                        "locker_id": task.get("locker_id", "")
+                    }
+                    queue_details[level].append(task_detail)
+        
+        # 如果有正在执行的任务，获取其详情
+        if current_execution["active"] and current_execution.get("current_task_id"):
+            executing_task = get_task_by_id(current_execution["current_task_id"])
+            if executing_task:
+                location = get_location_by_id(executing_task.get('location_id', ''))
+                location_label = location.get('label', executing_task.get('location_id', '未知位置')) if location else executing_task.get('location_id', '未知位置')
+                
+                current_executing_task = {
+                    "task_id": executing_task["task_id"],
+                    "user_id": executing_task["user_id"],
+                    "receiver": executing_task["receiver"],
+                    "location_id": executing_task["location_id"],
+                    "location_label": location_label,
+                    "security_level": executing_task["security_level"],
+                    "description": executing_task.get("description", ""),
+                    "status": "executing",
+                    "progress": f"{current_execution['completed_count']}/{current_execution['total_count']}",
+                    "locker_id": executing_task.get("locker_id", "")
+                }
+        
         status = {
             "queues": {
                 level: len(queue) for level, queue in task_queues.items()
             },
+            "queue_details": queue_details,
+            "current_executing_task": current_executing_task,
             "current_execution": {
                 "active": current_execution["active"],
                 "current_queue_level": current_execution["current_queue_level"],

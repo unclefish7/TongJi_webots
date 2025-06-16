@@ -299,8 +299,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
 import { authService } from '@/services/authService'
-import { taskService } from '@/services/taskService'
-import { robotService } from '@/services/robotService'
+import { pickupApiService } from '@/services/pickupApiService'
+import { systemStatusService } from '@/services/systemStatusService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 import {
   Lock,
@@ -377,25 +377,28 @@ const refreshPackages = async () => {
       return
     }
 
-    // 获取用户的包裹列表
-    const tasks = await taskService.getUserTasks(user.user_id)
+    // 获取用户的取件任务列表
+    const response = await pickupApiService.getPickupTasks(user.user_id)
     
-    // 筛选出待取件的任务
-    userPackages.value = tasks
-      .filter(task => task.status === 'ready_for_pickup')
-      .map(task => ({
+    if (response.success) {
+      // 将取件任务转换为用户包裹格式
+      userPackages.value = response.tasks.map(task => ({
         id: task.task_id,
         floor: 1, // 模拟楼层
         compartmentNumber: task.locker_id || 'A1',
         securityLevel: task.security_level,
         content: task.description || '包裹',
-        sender: task.initiator,
-        arrivalTime: new Date(task.created_at).toLocaleString('zh-CN'),
+        sender: '未知', // 新API中没有sender信息，可能需要额外获取
+        arrivalTime: new Date().toLocaleString('zh-CN'), // 新API中没有时间信息
         timeline: [
-          { timestamp: new Date(task.created_at).toLocaleString('zh-CN'), content: '包裹已寄出', type: 'primary' },
-          { timestamp: new Date(task.updated_at || task.created_at).toLocaleString('zh-CN'), content: '包裹已到达', type: 'success' },
+          { timestamp: new Date().toLocaleString('zh-CN'), content: '包裹已寄出', type: 'primary' },
+          { timestamp: new Date().toLocaleString('zh-CN'), content: '包裹已到达', type: 'success' },
         ],
       }))
+    } else {
+      userPackages.value = []
+      ElMessage.warning('获取取件任务失败')
+    }
     
     ElMessage.success('包裹列表已刷新')
   } catch (error) {
@@ -425,15 +428,23 @@ const openCompartment = async (pkg: any) => {
       return
     }
 
-    // 完成取件任务
-    const completeRequest = {
-      task_id: pkg.id,
-      user_id: user.user_id
+    // 执行取件操作
+    const executeRequest = {
+      user_id: user.user_id,
+      task_id: pkg.id
     }
 
-    const result = await taskService.completeTask(completeRequest)
+    const result = await pickupApiService.executePickup(executeRequest)
     
     if (result.success) {
+      // 更新柜门状态
+      if (pkg.compartmentNumber) {
+        systemStatusService.updateLockerStatus(
+          pkg.compartmentNumber,
+          'available'
+        )
+      }
+
       successCompartment.value = `${pkg.floor}F-${pkg.compartmentNumber}`
       showSuccessDialog.value = true
 
@@ -443,7 +454,7 @@ const openCompartment = async (pkg: any) => {
         userPackages.value.splice(index, 1)
       }
 
-      ElMessage.success('取件成功')
+      ElMessage.success(result.message || '取件成功')
     } else {
       ElMessage.error(result.message || '取件失败')
     }

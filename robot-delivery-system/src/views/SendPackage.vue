@@ -332,9 +332,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
 import { authService } from '@/services/authService'
-import { mapService } from '@/services/mapService'
-import { taskService } from '@/services/taskService'
-import { robotService } from '@/services/robotService'
+import { locationApiService } from '@/services/locationApiService'
+import { taskApiService } from '@/services/taskApiService'
+import { systemStatusService } from '@/services/systemStatusService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 import { Box, Lock, Upload, Grid, InfoFilled } from '@element-plus/icons-vue'
 
@@ -367,16 +367,16 @@ const sendRules = computed(() => ({
 // 位置选项（从地图服务获取）
 const locationOptions = ref<any[]>([])
 
-// 初始化地图数据
+// 初始化地点数据
 onMounted(async () => {
   try {
     console.log('开始获取地点数据...')
-    const locations = await mapService.getAllLocations()
+    const locations = await locationApiService.getAllLocations()
     console.log('获取到的地点数据:', locations)
     
     locationOptions.value = locations.map((location: any) => ({
-      value: location.id,
-      label: location.name,
+      value: location.location_id,  // 使用 location_id 作为值
+      label: location.label,        // 使用 label 作为显示文本
       location: location
     }))
     
@@ -488,11 +488,10 @@ const submitSend = async () => {
       return
     }
 
-    // 获取目标地点信息
+    // 获取目标地点信息（现在 destination 已经是 location_id 了）
     const targetLocationId = Array.isArray(sendForm.destination) ? sendForm.destination[0] : sendForm.destination
-    const targetLocation = await mapService.getLocationByName(targetLocationId)
-    if (!targetLocation) {
-      ElMessage.error('目标地点信息异常')
+    if (!targetLocationId) {
+      ElMessage.error('请选择收件地址')
       return
     }
 
@@ -505,16 +504,17 @@ const submitSend = async () => {
       description: sendForm.description
     }
 
-    const taskResult = await taskService.createTask(taskRequest)
+    const taskResult = await taskApiService.createTask(taskRequest)
 
     if (taskResult.success && taskResult.task_id) {
-      // 添加机器人任务到队列
-      await robotService.addDeliveryTask(
-        taskResult.task_id,
-        user.user_id,
-        targetLocationId,
-        `寄送包裹给${taskRequest.receiver}`
-      )
+      // 更新柜门状态
+      if (taskResult.locker_id) {
+        systemStatusService.updateLockerStatus(
+          taskResult.locker_id,
+          'occupied',
+          taskResult.task_id
+        )
+      }
 
       // 设置成功信息
       selectedCompartment.value = {

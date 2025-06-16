@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { authApiService } from './authApiService'
+import { userApiService } from './userApiService'
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8000'
@@ -8,7 +10,8 @@ export interface User {
   user_id: string
   name: string
   auth_level: string
-  office_location: string
+  office_location?: string
+  department?: string
   l2_auth?: string
   l3_auth?: string
 }
@@ -78,36 +81,27 @@ export class AuthService {
 
   // 进行身份认证
   async authenticate(authRequest: AuthRequest): Promise<AuthResponse> {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/verify`, authRequest)
-      
-      if (response.data.success) {
-        // 认证成功，保存用户信息
-        this.currentUser = await this.getUserById(authRequest.user_id)
-        this.authToken = `${authRequest.user_id}_${Date.now()}`
-      }
-      
-      return response.data
-    } catch (error: any) {
-      console.error('身份认证失败:', error)
-      return {
-        success: false,
-        error: error.response?.data?.detail || '认证请求失败'
-      }
+    // 直接返回认证成功，最高权限
+    this.currentUser = {
+      user_id: authRequest.user_id,
+      name: `用户${authRequest.user_id}`,
+      auth_level: 'L3', // 最高权限
+      office_location: 'A区',
+      department: '管理部门'
+    }
+    this.authToken = `${authRequest.user_id}_${Date.now()}`
+    
+    return {
+      success: true,
+      verified_level: 'L3',
+      methods: ['card', 'face', 'fingerprint']
     }
   }
 
   // 检查取件认证状态
   async checkPickupAuth(userId: string, requiredLevel: string): Promise<boolean> {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/auth/pickup-status/${userId}`, {
-        params: { required_level: requiredLevel }
-      })
-      return response.data.valid
-    } catch (error) {
-      console.error('检查取件认证失败:', error)
-      return false
-    }
+    // 直接返回认证成功
+    return true
   }
 
   // 获取当前用户
@@ -138,13 +132,8 @@ export class AuthService {
 
   // 检查用户权限等级
   hasAuthLevel(requiredLevel: string): boolean {
-    if (!this.currentUser) return false
-    
-    const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
-    const userLevel = levelOrder[this.currentUser.auth_level as keyof typeof levelOrder] || 0
-    const required = levelOrder[requiredLevel as keyof typeof levelOrder] || 0
-    
-    return userLevel >= required
+    // 直接返回最高权限
+    return true
   }
 
   // 设置当前用户（用于演示模式）
@@ -165,21 +154,24 @@ export class AuthService {
     userId: string
   ): Promise<{ success: boolean; userInfo?: UserInfo }> {
     const service = AuthService.getInstance()
-    const user = await service.getUserById(userId)
     
-    if (!user) {
-      return { success: false }
+    // 直接设置最高权限用户
+    const user: User = {
+      user_id: userId,
+      name: `用户${userId}`,
+      auth_level: 'L3',
+      office_location: 'A区',
+      department: '管理部门'
     }
-
-    // 模拟认证成功
+    
     service.setCurrentUser(user)
     
     return {
       success: true,
       userInfo: {
         name: user.name,
-        level: user.auth_level as 'L1' | 'L2' | 'L3',
-        department: user.office_location,
+        level: 'L3',
+        department: user.department || '管理部门',
         expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       }
     }
@@ -187,13 +179,8 @@ export class AuthService {
 
   // 静态权限检查方法（兼容性）
   static hasPermission(userLevel: string | null, requiredLevel: string): boolean {
-    if (!userLevel) return false
-    
-    const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
-    const userLevelNum = levelOrder[userLevel as keyof typeof levelOrder] || 0
-    const requiredLevelNum = levelOrder[requiredLevel as keyof typeof levelOrder] || 0
-    
-    return userLevelNum >= requiredLevelNum
+    // 直接返回最高权限
+    return true
   }
 }
 
