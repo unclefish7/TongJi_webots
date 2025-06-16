@@ -94,7 +94,31 @@
                     </div>
                   </el-radio>
                 </el-radio-group>
-              </el-form-item>              <!-- 收件地址 -->
+              </el-form-item>              <!-- 收件人选择 -->
+              <el-form-item label="收件人" prop="receiver">
+                <el-select
+                  v-model="sendForm.receiver"
+                  placeholder="请选择收件人"
+                  style="width: 100%"
+                  filterable
+                  loading-text="加载中..."
+                  :loading="isLoadingUsers"
+                >
+                  <el-option
+                    v-for="user in userOptions"
+                    :key="user.value"
+                    :label="user.label"
+                    :value="user.value"
+                  >
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span>{{ user.label }}</span>
+                      <el-tag size="small" :type="getLevelType(user.authLevel)">{{ user.authLevel }}</el-tag>
+                    </div>
+                  </el-option>
+                </el-select>
+              </el-form-item>
+
+              <!-- 收件地址 -->
               <el-form-item label="收件地址" prop="destination">
                 <el-select
                   v-model="sendForm.destination"
@@ -335,6 +359,7 @@ import { authService } from '@/services/authService'
 import { locationApiService } from '@/services/locationApiService'
 import { taskApiService } from '@/services/taskApiService'
 import { systemStatusService } from '@/services/systemStatusService'
+import { userApiService } from '@/services/userApiService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 import { Box, Lock, Upload, Grid, InfoFilled } from '@element-plus/icons-vue'
 
@@ -344,6 +369,7 @@ const robotStore = useRobotStore()
 // 表单数据
 const sendForm = reactive({
   securityLevel: 'L1',
+  receiver: '', // 新增收件人字段
   destination: '', // 改为字符串类型
   recipientInfo: {
     name: '',
@@ -357,6 +383,7 @@ const sendForm = reactive({
 // 表单验证规则
 const sendRules = computed(() => ({
   securityLevel: [{ required: true, message: '请选择安全等级', trigger: 'change' }],
+  receiver: [{ required: true, message: '请选择收件人', trigger: 'change' }],
   destination: [{ required: true, message: '请选择收件地址', trigger: 'change' }],
   description: [{ required: true, message: '请输入包裹描述', trigger: 'blur' }],
   ...(sendForm.securityLevel === 'L3' && {
@@ -367,8 +394,13 @@ const sendRules = computed(() => ({
 // 位置选项（从地图服务获取）
 const locationOptions = ref<any[]>([])
 
-// 初始化地点数据
+// 用户选项（从用户服务获取）
+const userOptions = ref<any[]>([])
+const isLoadingUsers = ref(false)
+
+// 初始化地点数据和用户数据
 onMounted(async () => {
+  // 加载地点数据
   try {
     console.log('开始获取地点数据...')
     const locations = await locationApiService.getAllLocations()
@@ -384,6 +416,28 @@ onMounted(async () => {
   } catch (error) {
     console.error('获取地点数据失败:', error)
     ElMessage.error('获取地点数据失败')
+  }
+
+  // 加载用户数据
+  try {
+    console.log('开始获取用户数据...')
+    isLoadingUsers.value = true
+    const users = await userApiService.getAllUsers()
+    console.log('获取到的用户数据:', users)
+    
+    userOptions.value = users.map((user: any) => ({
+      value: user.user_id,     // 使用 user_id 作为值
+      label: user.name,        // 使用 name 作为显示文本
+      authLevel: user.auth_level,  // 保存认证等级用于显示
+      user: user
+    }))
+    
+    console.log('处理后的用户选项:', userOptions.value)
+  } catch (error) {
+    console.error('获取用户数据失败:', error)
+    ElMessage.error('获取用户数据失败')
+  } finally {
+    isLoadingUsers.value = false
   }
 })
 
@@ -410,7 +464,7 @@ const canSubmit = computed(() => {
   const hasRequiredInfo =
     sendForm.securityLevel !== 'L3' ||
     (sendForm.recipientInfo.name && sendForm.recipientInfo.phone && sendForm.recipientInfo.idNumber)
-  return hasAuth && hasRequiredInfo && sendForm.destination.length > 0 && sendForm.description
+  return hasAuth && hasRequiredInfo && sendForm.receiver.length > 0 && sendForm.destination.length > 0 && sendForm.description
 })
 
 // 监听安全等级变化
@@ -440,7 +494,8 @@ const getLevelType = (level: string) => {
 }
 
 const onSecurityLevelChange = () => {
-  // 清空收件人信息
+  // 清空收件人选择和信息
+  sendForm.receiver = ''
   sendForm.recipientInfo = {
     name: '',
     phone: '',
@@ -498,7 +553,7 @@ const submitSend = async () => {
     // 创建寄送任务
     const taskRequest = {
       user_id: user.user_id,
-      receiver: sendForm.recipientInfo.name || '未指定',
+      receiver: sendForm.receiver, // 使用选择的收件人ID
       location_id: targetLocationId,
       security_level: sendForm.securityLevel as 'L1' | 'L2' | 'L3',
       description: sendForm.description
@@ -547,6 +602,7 @@ const resetForm = () => {
   if (sendFormRef.value) {
     sendFormRef.value.resetFields()
   }
+  sendForm.receiver = ''
   sendForm.recipientInfo = {
     name: '',
     phone: '',

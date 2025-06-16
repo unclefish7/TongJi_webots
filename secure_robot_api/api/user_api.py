@@ -4,7 +4,7 @@ from services.auth_service import load_users, get_user_by_id
 
 router = APIRouter()
 
-@router.get("/users", response_model=List[dict])
+@router.get("", response_model=List[dict])
 async def get_all_users():
     """获取所有用户列表"""
     try:
@@ -13,7 +13,7 @@ async def get_all_users():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取用户列表失败: {str(e)}")
 
-@router.get("/users/{user_id}", response_model=dict)
+@router.get("/{user_id}", response_model=dict)
 async def get_user(user_id: str):
     """根据用户ID获取用户信息"""
     try:
