@@ -24,8 +24,7 @@
           </div>
           <div v-else class="no-auth">
             <el-alert 
-              title="未认证" 
-              description="请先进行身份认证以使用系统功能" 
+              title="未认证, 请先进行身份认证" 
               type="warning" 
               :closable="false"
             />
@@ -190,8 +189,8 @@ onMounted(() => {
   align-items: center;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  padding: 0.5rem 1rem;
-  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.5rem;
+  /* backdrop-filter: blur(10px); */
 }
 
 .user-info {
@@ -219,7 +218,7 @@ onMounted(() => {
 }
 
 .no-auth .el-alert {
-  margin: 0;
+  /* margin: 0; */
 }
 
 .header-right {

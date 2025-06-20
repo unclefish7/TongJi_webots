@@ -3,7 +3,7 @@
     <template #header>
       <div class="card-header">
         <el-icon><List /></el-icon>
-        <span>机器人任务队列</span>
+        <span>任务队列</span>
         <div class="queue-stats" v-if="queueStatus">
           <el-tag size="small" type="info">L1: {{ queueStatus.queues?.L1 || 0 }}</el-tag>
           <el-tag size="small" type="warning">L2: {{ queueStatus.queues?.L2 || 0 }}</el-tag>

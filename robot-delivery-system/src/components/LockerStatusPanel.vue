@@ -53,7 +53,7 @@
     <el-dialog
       v-model="showDetailsDialog"
       title="柜门详情"
-      width="500px"
+      width="60%"
       :close-on-click-modal="false"
     >
       <div v-if="selectedLocker" class="locker-details">
@@ -275,6 +275,7 @@ const formatTime = (timeStr: string) => {
 }
 
 .locker-details {
-  padding: 1rem 0;
+  /* padding: 1rem 0; */
+  /* width: 50%; */
 }
 </style>

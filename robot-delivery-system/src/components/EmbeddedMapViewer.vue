@@ -1,517 +1,664 @@
 <template>
-  <div class="embedded-map-viewer">
-    <!-- 地图控制栏 -->
-    <div class="map-controls">
-      <el-button-group size="small">
-        <el-button @click="connectToROS" :disabled="isConnected" type="primary">
-          {{ isConnected ? '已连接' : '连接ROS' }}
-        </el-button>
+    <div class="embedded-map-viewer">
+        <!-- 地图控制栏 -->
+        <div class="map-controls">
+            <el-button-group size="small">
+                <el-button @click="connectToROS" :disabled="isConnected" :type="isConnected ? 'success' : 'primary'">
+                    {{ isConnected ? '已连接' : '连接ROS' }}
+                </el-button>
+                <el-button @click="toggleRobotTracking" :disabled="!isConnected"
+                    :type="isTrackingRobot ? 'warning' : 'primary'">
+                    {{ isTrackingRobot ? '停止追踪' : '开始追踪' }}
+                </el-button>
+                <el-button @click="centerOnRobot" :disabled="!robotPosition" size="small">
+                    <el-icon>
+                        <Aim />
+                    </el-icon>
+                    定位机器人
+                </el-button>
+                <el-button @click="resetView" size="small" type="danger">
+                    重置视图
+                </el-button>
+            </el-button-group>
+        </div>
 
-        <el-button @click="toggleRobotTracking" :disabled="!isConnected" :type="isTrackingRobot ? 'warning' : 'info'">
-          {{ isTrackingRobot ? '停止追踪' : '开始追踪' }}
-        </el-button>
-        <!-- <el-button @click="centerOnRobot" :disabled="!robotPosition" size="small">
-          <el-icon><Aim /></el-icon>
-        </el-button> -->
-        <el-button @click="resetView" size="small" type="info">
-          重置视图
-        </el-button>
-      </el-button-group>
-    </div>
+        <!-- 状态信息 -->
+        <div class="map-status" v-if="mapData">
+            <span v-if="robotPosition" class="robot-info">
+                机器人: ({{ robotPosition.x.toFixed(2) }}, {{ robotPosition.y.toFixed(2) }})
+                角度: {{ robotYawDegrees?.toFixed(1) }}°
+            </span>
+            <span class="map-info">
+                缩放: {{ scale.toFixed(2) }}x | 旋转: {{ rotation.toFixed(0) }}°
+            </span>
+        </div>
 
-    <!-- 状态信息 -->
-    <div class="map-status" v-if="mapData">
-      <el-tag :type="isConnected ? 'success' : 'danger'" size="small">
-        {{ isConnected ? 'ROS已连接' : 'ROS未连接' }}
-      </el-tag>
-      <span v-if="robotPosition" class="robot-info">
-        机器人: ({{ robotPosition.x.toFixed(1) }}, {{ robotPosition.y.toFixed(1) }})
-      </span>
-    </div>
+        <!-- 地图容器 - 双层画布架构 -->
+        <div class="map-container" ref="mapContainer">
+            <!-- 地图层 - 静态，使用Canvas绘制 -->
+            <canvas ref="mapCanvas" class="map-layer"></canvas>
 
-    <!-- 地图画布 -->
-    <div class="map-canvas-container" ref="mapContainer">
-      <canvas 
-        ref="mapCanvas" 
-        @wheel="handleZoom"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
-      ></canvas>
+            <!-- 机器人与交互层 - 动态重绘 -->
+            <canvas ref="robotCanvas" class="robot-layer" @wheel.prevent="handleZoom" @mousedown="handleMouseDown"
+                @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp"></canvas>
+
+            <!-- 缩放控件 -->
+            <div class="zoom-controls">
+                <div class="zoom-slider-container">
+                    <button class="zoom-btn" @click="zoomOut" title="缩小">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M19,13H5V11H19V13Z" />
+                        </svg>
+                    </button>
+                    <div class="zoom-slider-wrapper">
+                        <input type="range" class="zoom-slider" :min="minScale" :max="maxScale" :step="0.05"
+                            v-model.number="scale" @input="onZoomSliderChange" />
+                        <div class="zoom-value">{{ scale.toFixed(1) }}x</div>
+                    </div>
+                    <button class="zoom-btn" @click="zoomIn" title="放大">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElButton, ElButtonGroup, ElTag, ElMessage, ElIcon } from 'element-plus'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ElButton, ElButtonGroup, ElMessage, ElIcon } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
 import { rosConnection, type MapData, type RobotPosition } from '@/services/rosConnection'
+import { throttle } from 'lodash-es'
 
-// 响应式数据
+// --- 响应式状态 ---
 const isConnected = ref(false)
 const isTrackingRobot = ref(false)
 const mapData = ref<MapData | null>(null)
 const robotPosition = ref<RobotPosition | null>(null)
 
-// DOM引用
+// --- DOM 引用 ---
 const mapContainer = ref<HTMLDivElement>()
 const mapCanvas = ref<HTMLCanvasElement>()
+const robotCanvas = ref<HTMLCanvasElement>()
 
-// 画布状态
-const scale = ref(2) // 进一步减小初始缩放比例，从5改为2
+// --- 视图变换状态 ---
+const scale = ref(1.0)
+const minScale = ref(0.1)
+const maxScale = ref(10.0)
 const offsetX = ref(0)
 const offsetY = ref(0)
+const rotation = ref(0) // 角度制
+
+// --- 交互状态 ---
 const isDragging = ref(false)
 const lastMouseX = ref(0)
 const lastMouseY = ref(0)
 
-// 追踪定时器
-let trackingInterval: number | null = null
-// 渲染优化
-let animationFrameId: number | null = null
-let needsRedraw = false
-// 拖拽优化
-let dragAnimationId: number | null = null
-let isDragScheduled = false
+// --- 性能优化 ---
+let mapBitmap: ImageBitmap | null = null
+let pendingFrame: number | null = null
 
-// 连接到ROS
+// --- 计算属性 ---
+const robotYawRadians = computed(() => {
+    if (!robotPosition.value) return 0
+    const q = robotPosition.value.orientation
+    return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+})
+
+const robotYawDegrees = computed(() => {
+    return (robotYawRadians.value * 180 / Math.PI + 360) % 360
+})
+
+// --- ROS 连接与数据处理 ---
 const connectToROS = async () => {
-  try {
-    await rosConnection.connect()
-    isConnected.value = true
-    
-    // 设置回调函数
-    rosConnection.onMapReceived((map: MapData) => {
-      mapData.value = map
-      nextTick(() => {
-        scheduleRedraw()
-      })
-    })
-    
-    rosConnection.onRobotPositionUpdate((position: RobotPosition) => {
-      robotPosition.value = position
-      nextTick(() => {
-        scheduleRedraw()
-      })
-    })
-    
-    // resetView() 
-    ElMessage.success('成功连接到ROS')
-  } catch (error) {
-    ElMessage.error('连接ROS失败')
-    console.error(error)
-  }
-}
+    try {
+        console.log('开始连接ROS服务...')
+        await rosConnection.connect()
+        isConnected.value = true
+        console.log('ROS连接成功')
 
-// 请求地图数据
-const requestMap = async () => {
-  try {
-    const map = await rosConnection.getMapOnce()
-    mapData.value = map
-    
-    // 自动调整视图以适配新地图 - 视角中心设置在地图中心
-    if (mapCanvas.value && mapContainer.value) {
-      const container = mapContainer.value
-      const scaleX = (container.clientWidth * 0.6) / map.width  // 适当增大显示比例
-      const scaleY = (container.clientHeight * 0.6) / map.height 
-      const autoScale = Math.min(scaleX, scaleY, 2.0) // 增加最大缩放限制
-      
-      scale.value = Math.max(0.1, autoScale) // 设置合理的最小缩放
-      
-      // 将视角中心设置在地图中心点
-      const mapCenterX = map.width / 2
-      const mapCenterY = map.height / 2
-      
-      offsetX.value = container.clientWidth / 2 - mapCenterX * scale.value
-      offsetY.value = container.clientHeight / 2 - mapCenterY * scale.value
+        rosConnection.onMapReceived(async (map: MapData) => {
+            console.log('接收到地图数据:', map)
+            mapData.value = map
+            await createMapBitmap(map)
+            await nextTick()
+            resetView()
+        })
+
+        rosConnection.onRobotPositionUpdate(throttle((position: RobotPosition) => {
+            console.log('接收到机器人位置数据:', position)
+            const isFirstRobotPosition = !robotPosition.value
+            robotPosition.value = position
+
+            // 第一次接收到机器人位置时，自动居中显示
+            if (isFirstRobotPosition && mapData.value) {
+                console.log('第一次接收机器人位置，自动居中')
+                nextTick(() => {
+                    centerOnRobot()
+                    ElMessage.success('机器人位置已定位')
+                })
+            } else if (isTrackingRobot.value) {
+                centerOnRobot(false) // 追踪时平滑移动，不带动画
+            }
+            scheduleRedraw()
+        }, 50)) // 20Hz
+
+        // 开始追踪机器人位置
+        rosConnection.startTracking()
+        console.log('ROS事件监听器已设置，开始追踪机器人位置')
+        ElMessage.success('成功连接到ROS')
+    } catch (error) {
+        ElMessage.error('连接ROS失败')
+        console.error('ROS连接错误:', error)
     }
-    
-    nextTick(() => {
-      scheduleRedraw()
+}
+
+// --- 核心渲染逻辑 ---
+
+// 创建地图位图缓存 (Y轴翻转，使之与Canvas坐标系匹配)
+const createMapBitmap = async (map: MapData) => {
+    const { width, height, data } = map
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')!
+    const imageData = ctx.createImageData(width, height)
+    const pixelData = imageData.data
+
+    for (let i = 0; i < data.length; i++) {
+        const value = data[i]
+        let color = 205 // 未知区域
+        if (value === 0) color = 254 // 自由空间
+        else if (value === 100) color = 0 // 障碍物
+
+        const pixelIndex = i * 4
+        pixelData[pixelIndex] = color
+        pixelData[pixelIndex + 1] = color
+        pixelData[pixelIndex + 2] = color
+        pixelData[pixelIndex + 3] = 255
+    }
+    ctx.putImageData(imageData, 0, 0)
+
+    // Y-flip the image data to match canvas coordinates (Y-down)
+    const finalCanvas = document.createElement('canvas')
+    finalCanvas.width = width
+    finalCanvas.height = height
+    const finalCtx = finalCanvas.getContext('2d')!
+    finalCtx.scale(1, -1)
+    finalCtx.translate(0, -height)
+    finalCtx.drawImage(canvas, 0, 0)
+
+    if (mapBitmap) mapBitmap.close()
+    mapBitmap = await createImageBitmap(finalCanvas)
+}
+
+// 应用核心变换 (所有图层的基准)
+const applyTransformations = (ctx: CanvasRenderingContext2D) => {
+    if (!mapContainer.value || !mapData.value) return
+    const container = mapContainer.value
+    const mapCenterPx = { x: mapData.value.width / 2, y: mapData.value.height / 2 }
+
+    // 1. 移动到容器中心
+    ctx.translate(container.clientWidth / 2, container.clientHeight / 2)
+    // 2. 应用拖拽平移
+    ctx.translate(offsetX.value, offsetY.value)
+    // 3. 应用旋转
+    ctx.rotate(rotation.value * Math.PI / 180)
+    // 4. 应用缩放
+    ctx.scale(scale.value, scale.value)
+    // 5. 将地图中心对准原点
+    ctx.translate(-mapCenterPx.x, -mapCenterPx.y)
+}
+
+// 绘制静态地图层
+const drawStaticMap = () => {
+    if (!mapCanvas.value || !mapBitmap) return
+    const canvas = mapCanvas.value
+    const ctx = canvas.getContext('2d')!
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.save()
+    applyTransformations(ctx)
+    ctx.imageSmoothingEnabled = false // 像素风
+    ctx.drawImage(mapBitmap, 0, 0)
+    ctx.restore()
+}
+
+// 绘制机器人层
+const drawRobotLayer = () => {
+    if (!robotCanvas.value || !robotPosition.value || !mapData.value) return
+    const canvas = robotCanvas.value
+    const ctx = canvas.getContext('2d')!
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.save()
+    applyTransformations(ctx) // 应用完全相同的变换
+
+    const { resolution, origin, height } = mapData.value
+    const { x, y } = robotPosition.value
+
+    // 将ROS世界坐标 (米) 转换为地图像素坐标
+    const robotMapX = (x - origin.position.x) / resolution
+    const robotMapY = height - ((y - origin.position.y) / resolution) // Y轴翻转
+
+    // 调试信息：确保坐标计算正确
+    console.log('Robot position:', { x, y })
+    console.log('Map origin:', origin.position)
+    console.log('Robot map coordinates:', { robotMapX, robotMapY })
+
+    // --- 绘制机器人 ---
+    ctx.save()
+    ctx.translate(robotMapX, robotMapY)
+
+    // 绘制一个醒目的圆圈代表机器人位置，排除绘制复杂图形可能带来的问题
+    const robotRadius = Math.max(5, 8 / scale.value) // 确保在任何缩放级别都可见
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.9)' // 使用醒目的、略带透明的红色
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.lineWidth = Math.max(1, 2 / scale.value)
+    ctx.beginPath()
+    ctx.arc(0, 0, robotRadius, 0, 2 * Math.PI)
+    ctx.fill()
+    ctx.stroke()
+
+    // 绘制方向线
+    ctx.rotate(-robotYawRadians.value) // 应用旋转
+    ctx.beginPath()
+    ctx.moveTo(robotRadius, 0)
+    ctx.lineTo(robotRadius * 2, 0)
+    ctx.strokeStyle = '#111827' // 深色方向线
+    ctx.stroke()
+
+    ctx.restore()
+    // --- 结束绘制 ---
+
+    ctx.restore()
+}
+
+// 调度重绘 (rAF)
+const scheduleRedraw = () => {
+    if (pendingFrame) return
+    pendingFrame = requestAnimationFrame(() => {
+        drawStaticMap()
+        drawRobotLayer()
+        pendingFrame = null
     })
-    ElMessage.success('地图加载成功并已自动适配显示')
-  } catch (error) {
-    ElMessage.error('获取地图失败')
-    console.error(error)
-  }
 }
 
-// 切换机器人跟踪
-const toggleRobotTracking = () => {
-  isTrackingRobot.value = !isTrackingRobot.value
-  
-  if (isTrackingRobot.value) {
-    // 开始ROS追踪，每秒自动获取机器人位置
-    rosConnection.startTracking()
-    ElMessage.info('开始追踪机器人位置 - 每秒更新')
-  } else {
-    // 停止追踪
-    rosConnection.stopTracking()
-    if (trackingInterval) {
-      clearInterval(trackingInterval)
-      trackingInterval = null
-    }
-    ElMessage.info('停止追踪机器人位置')
-  }
-}
-
-// 居中机器人
-const centerOnRobot = () => {
-  if (!robotPosition.value || !mapCanvas.value || !mapData.value) return
-  
-  const canvas = mapCanvas.value
-  const robot = robotPosition.value
-  const map = mapData.value
-  
-  const mapX = (robot.x - map.origin.position.x) / map.resolution
-  const mapY = (robot.y - map.origin.position.y) / map.resolution
-  
-  offsetX.value = canvas.width / 2 - mapX * scale.value
-  offsetY.value = canvas.height / 2 - mapY * scale.value
-  
-  scheduleRedraw()
-}
-
-// 重置视图到合适的缩放和位置
-const resetView = () => {
-  // 重置偏移和缩放
-  offsetX.value = 0
-  offsetY.value = 0
-  
-  // 重新计算适合的视图
-  nextTick(() => {
-    resizeCanvas()
-    ElMessage.info('视图已重置')
-  })
-}
-
-// 绘制地图
-const drawMap = () => {
-  if (!mapCanvas.value || !mapData.value) return
-  
-  const canvas = mapCanvas.value
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  
-  // 清空画布
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  
-  // 保存上下文
-  ctx.save()
-  
-  // 应用变换
-  ctx.translate(offsetX.value, offsetY.value)
-  ctx.scale(scale.value, scale.value)
-  
-  // 绘制ROS地图
-  drawOccupancyGrid(ctx, mapData.value)
-  if (robotPosition.value) {
-    drawROSRobot(ctx, robotPosition.value, mapData.value)
-  }
-  
-  // 恢复上下文
-  ctx.restore()
-}
-
-// 绘制占用栅格地图
-const drawOccupancyGrid = (ctx: CanvasRenderingContext2D, map: MapData) => {
-  const imageData = ctx.createImageData(map.width, map.height)
-  const data = imageData.data
-  
-  for (let i = 0; i < map.data.length; i++) {
-    const value = map.data[i]
-    let color = 128 // 未知区域为灰色
-    
-    if (value === 0) {
-      color = 255 // 自由空间为白色
-    } else if (value === 100) {
-      color = 0 // 障碍物为黑色
-    }
-    
-    const pixelIndex = i * 4
-    data[pixelIndex] = color     // R
-    data[pixelIndex + 1] = color // G
-    data[pixelIndex + 2] = color // B
-    data[pixelIndex + 3] = 255   // A
-  }
-  
-  // 翻转Y轴
-  const tempCanvas = document.createElement('canvas')
-  tempCanvas.width = map.width
-  tempCanvas.height = map.height
-  const tempCtx = tempCanvas.getContext('2d')!
-  
-  tempCtx.putImageData(imageData, 0, 0)
-  ctx.scale(1, -1)
-  ctx.translate(0, -map.height)
-  ctx.drawImage(tempCanvas, 0, 0)
-}
-
-// 绘制ROS机器人（专门针对ROS地图大幅缩小）
-const drawROSRobot = (ctx: CanvasRenderingContext2D, robot: RobotPosition, map: MapData) => {
-  const mapX = (robot.x - map.origin.position.x) / map.resolution
-  const mapY = (robot.y - map.origin.position.y) / map.resolution
-  
-  const quaternion = robot.orientation
-  const yaw = Math.atan2(
-    2 * (quaternion.w * quaternion.z + quaternion.x * quaternion.y),
-    1 - 2 * (quaternion.y * quaternion.y + quaternion.z * quaternion.z)
-  )
-  
-  ctx.save()
-  ctx.translate(mapX, mapY)
-  ctx.rotate(-yaw)
-  
-  // 专门为ROS地图优化的机器人尺寸 - 大幅缩小但保证可见
-  const baseSize = Math.max(0.5, 1.0 / scale.value) // 减小基础尺寸
-  const robotRadius = baseSize / map.resolution/ 3.0
-  const arrowLength = (baseSize * 1.2) / map.resolution // 减小箭头长度
-  const arrowWidth = (baseSize * 0.3) / map.resolution // 减小箭头宽度
-  const lineWidth = Math.max(0.5, (baseSize * 0.15) / map.resolution) // 减小线宽
-  
-  // 绘制机器人本体
-  ctx.fillStyle = 'red'
-  ctx.beginPath()
-  ctx.arc(0, 0, robotRadius, 0, 2 * Math.PI)
-  ctx.fill()
-  
-  // 绘制机器人边框
-  ctx.strokeStyle = 'red'
-  ctx.lineWidth = lineWidth
-  ctx.beginPath()
-  ctx.arc(0, 0, robotRadius, 0, 2 * Math.PI)
-  ctx.stroke()
-  
-  // 绘制朝向箭头
-  ctx.strokeStyle = 'red'
-  ctx.lineWidth = lineWidth
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(arrowLength, 0)
-  ctx.moveTo(arrowLength - arrowWidth, -arrowWidth)
-  ctx.lineTo(arrowLength, 0)
-  ctx.lineTo(arrowLength - arrowWidth, arrowWidth)
-  ctx.stroke()
-  
-  ctx.restore()
-}
-
-// 鼠标事件处理（性能优化版本）
-const handleZoom = (event: WheelEvent) => {
-  event.preventDefault()
-  
-  const canvas = mapCanvas.value
-  if (!canvas) return
-  
-  const rect = canvas.getBoundingClientRect()
-  const mouseX = event.clientX - rect.left
-  const mouseY = event.clientY - rect.top
-  
-  const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1
-  const newScale = Math.max(0.01, Math.min(50, scale.value * scaleFactor)) // 从0.05/100改为0.01/50
-  
-  const scaleChange = newScale / scale.value
-  offsetX.value = mouseX - (mouseX - offsetX.value) * scaleChange
-  offsetY.value = mouseY - (mouseY - offsetY.value) * scaleChange
-  
-  scale.value = newScale
-  scheduleRedraw() // 使用优化的重绘
-}
+// --- 交互事件处理 ---
 
 const handleMouseDown = (event: MouseEvent) => {
-  isDragging.value = true
-  lastMouseX.value = event.clientX
-  lastMouseY.value = event.clientY
-  
-  // 添加鼠标样式
-  if (mapCanvas.value) {
-    mapCanvas.value.style.cursor = 'grabbing'
-  }
+    if (isTrackingRobot.value) {
+        isTrackingRobot.value = false
+        ElMessage.info('手动操作已取消机器人追踪')
+    }
+    isDragging.value = true
+    lastMouseX.value = event.clientX
+    lastMouseY.value = event.clientY
+    robotCanvas.value!.style.cursor = 'grabbing'
 }
 
 const handleMouseMove = (event: MouseEvent) => {
-  if (!isDragging.value) return
-  
-  const deltaX = event.clientX - lastMouseX.value
-  const deltaY = event.clientY - lastMouseY.value
-  
-  offsetX.value += deltaX
-  offsetY.value += deltaY
-  
-  lastMouseX.value = event.clientX
-  lastMouseY.value = event.clientY
-  
-  // 优化拖拽性能：使用专门的拖拽重绘调度
-  scheduleDragRedraw()
-}
+    if (!isDragging.value) return
+    const dx = event.clientX - lastMouseX.value
+    const dy = event.clientY - lastMouseY.value
+    lastMouseX.value = event.clientX
+    lastMouseY.value = event.clientY
 
-// 专门为拖拽优化的重绘调度函数
-const scheduleDragRedraw = () => {
-  if (isDragScheduled) return
-  isDragScheduled = true
-  
-  if (dragAnimationId) {
-    cancelAnimationFrame(dragAnimationId)
-  }
-  
-  dragAnimationId = requestAnimationFrame(() => {
-    if (isDragScheduled) {
-      drawMap()
-      isDragScheduled = false
-    }
-    dragAnimationId = null
-  })
+    offsetX.value += dx
+    offsetY.value += dy
+    scheduleRedraw()
 }
 
 const handleMouseUp = () => {
-  isDragging.value = false
-  
-  // 清理拖拽动画
-  if (dragAnimationId) {
-    cancelAnimationFrame(dragAnimationId)
-    dragAnimationId = null
-  }
-  isDragScheduled = false
-  
-  // 恢复鼠标样式
-  if (mapCanvas.value) {
-    mapCanvas.value.style.cursor = 'grab'
-  }
+    isDragging.value = false
+    robotCanvas.value!.style.cursor = 'grab'
+    constrainView()
+    scheduleRedraw()
 }
 
-// 调整画布大小
-const resizeCanvas = () => {
-  if (!mapCanvas.value || !mapContainer.value) return
-  
-  const container = mapContainer.value
-  mapCanvas.value.width = container.clientWidth
-  mapCanvas.value.height = container.clientHeight
-  
-  // 初始化视图 - ROS地图自动适配，视角中心在地图中心
-  if (offsetX.value === 0 && offsetY.value === 0 && mapData.value) {
-    const mapWidth = mapData.value.width
-    const mapHeight = mapData.value.height
-    
-    const scaleX = (container.clientWidth * 0.6) / mapWidth // 与requestMap保持一致
-    const scaleY = (container.clientHeight * 0.6) / mapHeight
-    const autoScale = Math.min(scaleX, scaleY, 2.0)
-    
-    scale.value = Math.max(0.1, autoScale)
-    
-    // 将视角中心设置在地图中心点
-    const mapCenterX = mapWidth / 2
-    const mapCenterY = mapHeight / 2
-    
-    offsetX.value = container.clientWidth / 2 - mapCenterX * scale.value
-    offsetY.value = container.clientHeight / 2 - mapCenterY * scale.value
-  }
-  
-  scheduleRedraw()
-}
-
-// 优化的绘制函数，避免频繁重绘
-const scheduleRedraw = () => {
-  if (needsRedraw) return
-  needsRedraw = true
-  
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId)
-  }
-  
-  animationFrameId = requestAnimationFrame(() => {
-    if (needsRedraw) {
-      drawMap()
-      needsRedraw = false
+// 以鼠标为中心缩放
+const handleZoom = (event: WheelEvent) => {
+    if (!mapContainer.value) return
+    if (isTrackingRobot.value) {
+        isTrackingRobot.value = false
+        ElMessage.info('手动操作已取消机器人追踪')
     }
-    animationFrameId = null
-  })
+    const rect = mapContainer.value.getBoundingClientRect()
+    const mouseX = event.clientX - rect.left
+    const mouseY = event.clientY - rect.top
+
+    const containerCenterX = rect.width / 2
+    const containerCenterY = rect.height / 2
+
+    // 1. 计算鼠标相对于当前视图中心的位置
+    const mouseRelativeToCenter = {
+        x: mouseX - containerCenterX - offsetX.value,
+        y: mouseY - containerCenterY - offsetY.value
+    }
+
+    // 2. 计算新旧缩放比例
+    const oldScale = scale.value
+    const zoomFactor = 1.1
+    const newScale = event.deltaY < 0 ? oldScale * zoomFactor : oldScale / zoomFactor
+    scale.value = Math.max(minScale.value, Math.min(newScale, maxScale.value))
+    const scaleRatio = scale.value / oldScale
+
+    // 3. 调整偏移量，以保持鼠标下的点不动
+    offsetX.value += mouseRelativeToCenter.x - mouseRelativeToCenter.x * scaleRatio
+    offsetY.value += mouseRelativeToCenter.y - mouseRelativeToCenter.y * scaleRatio
+
+    constrainView()
+    scheduleRedraw()
 }
 
-// 生命周期
+// --- 控制函数 ---
+
+const toggleRobotTracking = () => {
+    isTrackingRobot.value = !isTrackingRobot.value
+    if (isTrackingRobot.value) {
+        ElMessage.success('已开启机器人追踪')
+        centerOnRobot()
+    } else {
+        ElMessage.info('已关闭机器人追踪')
+    }
+}
+
+// 将机器人置于视图中心
+const centerOnRobot = (redraw = true) => {
+    if (!robotPosition.value || !mapData.value) return
+
+    const { resolution, origin, width, height } = mapData.value
+    // 使用与drawRobotLayer完全相同的坐标转换
+    const robotMapX = (robotPosition.value.x - origin.position.x) / resolution
+    const robotMapY = height - ((robotPosition.value.y - origin.position.y) / resolution) // Y轴翻转
+
+    const mapCenterPx = { x: width / 2, y: height / 2 }
+
+    // 计算机器人相对于地图中心的像素偏移
+    const robotOffsetX = robotMapX - mapCenterPx.x
+    const robotOffsetY = robotMapY - mapCenterPx.y
+
+    // 考虑当前的缩放和旋转，计算需要的视图偏移
+    const rad = rotation.value * Math.PI / 180
+    const cos = Math.cos(rad)
+    const sin = Math.sin(rad)
+
+    // 将机器人在地图中的偏移，转换为需要的视图偏移（取反，因为我们要让机器人居中）
+    const rotatedOffsetX = robotOffsetX * cos - robotOffsetY * sin
+    const rotatedOffsetY = robotOffsetX * sin + robotOffsetY * cos
+
+    // 应用缩放并取反（因为要将机器人移到中心）
+    offsetX.value = -rotatedOffsetX * scale.value
+    offsetY.value = -rotatedOffsetY * scale.value
+
+    if (redraw) {
+        constrainView()
+        scheduleRedraw()
+    }
+}
+
+// 重置视图到初始状态
+const resetView = () => {
+    if (!mapData.value || !mapContainer.value) return
+    const container = mapContainer.value
+    const map = mapData.value
+
+    // 计算合适的初始缩放，使地图能完整显示
+    const scaleX = container.clientWidth / map.width
+    const scaleY = container.clientHeight / map.height
+    scale.value = Math.min(scaleX, scaleY) * 0.9
+
+    // 设置缩放范围
+    minScale.value = scale.value * 0.2
+    maxScale.value = scale.value * 20
+
+    // 重置状态
+    rotation.value = -90 // 默认旋转-90度，使地图朝上
+    offsetX.value = 0
+    offsetY.value = 0
+    isTrackingRobot.value = false
+
+    constrainView()
+    scheduleRedraw()
+}
+
+// 限制视图拖动范围
+const constrainView = () => {
+    // (可选) 这是一个简化的实现，可以根据需要变得更复杂
+    // 目标是防止地图完全移出视野
+    if (!mapData.value || !mapContainer.value) return
+    const map = mapData.value
+    const container = mapContainer.value
+
+    const effectiveMapWidth = map.width * scale.value
+    const effectiveMapHeight = map.height * scale.value
+
+    const limitX = (effectiveMapWidth / 2) + (container.clientWidth / 2) * 0.8
+    const limitY = (effectiveMapHeight / 2) + (container.clientHeight / 2) * 0.8
+
+    offsetX.value = Math.max(-limitX, Math.min(limitX, offsetX.value))
+    offsetY.value = Math.max(-limitY, Math.min(limitY, offsetY.value))
+}
+
+// 缩放控件
+const onZoomSliderChange = (event: Event) => {
+    const target = event.target as HTMLInputElement
+    scale.value = parseFloat(target.value)
+    constrainView()
+    scheduleRedraw()
+}
+const zoomIn = () => {
+    scale.value = Math.min(maxScale.value, scale.value * 1.25)
+    constrainView()
+    scheduleRedraw()
+}
+const zoomOut = () => {
+    scale.value = Math.max(minScale.value, scale.value / 1.25)
+    constrainView()
+    scheduleRedraw()
+}
+
+// --- 生命周期钩子 ---
+
+const resizeCanvas = () => {
+    if (!mapContainer.value || !mapCanvas.value || !robotCanvas.value) return
+    const container = mapContainer.value
+    mapCanvas.value.width = container.clientWidth
+    mapCanvas.value.height = container.clientHeight
+    robotCanvas.value.width = container.clientWidth
+    robotCanvas.value.height = container.clientHeight
+    scheduleRedraw()
+}
+
 onMounted(() => {
-  nextTick(() => {
-    resizeCanvas()
-    // window.addEventListener('resize', resizeCanvas)
-    
-    // 自动连接ROS并开始实时追踪
-    // setTimeout(() => {
-    //   connectToROS().then(() => {
-    //     if (isConnected.value) {
-    //       requestMap()
-    //       setTimeout(() => {
-    //         toggleRobotTracking()
-    //       }, 1000) // 等待地图加载后开始追踪
-    //     }
-    //   })
-    // }, 500) // 延迟半秒确保组件完全初始化
-  })
+    nextTick(() => {
+        resizeCanvas()
+        window.addEventListener('resize', resizeCanvas)
+    })
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', resizeCanvas)
-  if (trackingInterval) {
-    clearInterval(trackingInterval)
-  }
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId)
-  }
-  if (dragAnimationId) {
-    cancelAnimationFrame(dragAnimationId)
-  }
-  rosConnection.disconnect()
+    window.removeEventListener('resize', resizeCanvas)
+    if (pendingFrame) cancelAnimationFrame(pendingFrame)
+    if (mapBitmap) mapBitmap.close()
+    rosConnection.disconnect()
 })
+
 </script>
 
 <style scoped>
 .embedded-map-viewer {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: white;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #f0f2f5;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 .map-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #fafafa;
+    display: flex;
+    justify-content: center;
+    /* 中心对齐按钮组 */
+    align-items: center;
+    padding: 12px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
 }
 
 .map-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 12px;
-  background: #f9f9f9;
-  border-bottom: 1px solid #e0e0e0;
-  font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(5px);
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 12px;
+    color: #4b5563;
+    flex-shrink: 0;
 }
 
-.robot-info {
-  color: #666;
-  font-size: 11px;
+.robot-info,
+.map-info {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-weight: 500;
+    background-color: #f3f4f6;
+    padding: 4px 8px;
+    border-radius: 4px;
 }
 
-.map-canvas-container {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  min-height: 300px;
+.map-container {
+    flex-grow: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: #e5e7eb;
+    background-image:
+        linear-gradient(45deg, #d1d5db 25%, transparent 25%),
+        linear-gradient(-45deg, #d1d5db 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #d1d5db 75%),
+        linear-gradient(-45deg, transparent 75%, #d1d5db 75%);
+    background-size: 20px 20px;
 }
 
-.map-canvas-container canvas {
-  display: block;
-  cursor: grab;
-  background: #f8f8f8;
-  width: 100%;
-  height: 100%;
+.map-layer,
+.robot-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
 }
 
-.map-canvas-container canvas:active {
-  cursor: grabbing;
+.map-layer {
+    pointer-events: none;
+    z-index: 1;
+}
+
+.robot-layer {
+    cursor: grab;
+    z-index: 2;
+}
+
+.robot-layer:active {
+    cursor: grabbing;
+}
+
+/* 缩放控件样式 */
+.zoom-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.zoom-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.zoom-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #4b5563;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.zoom-btn:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.zoom-slider-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 150px;
+}
+
+.zoom-slider {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #d1d5db;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #3b82f6;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.zoom-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.zoom-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3b82f6;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+}
+
+.zoom-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: #4b5563;
+    font-family: monospace;
+    min-width: 40px;
+    text-align: center;
 }
 </style>
