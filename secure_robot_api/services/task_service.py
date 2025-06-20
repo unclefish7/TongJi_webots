@@ -609,6 +609,11 @@ def start_task_execution() -> tuple[bool, str]:
                 })
                 
                 log_task_operation(f"{current_queue_level}_queue", "preempted", preempt_message)
+                
+                # 重新获取最高优先级队列（包含刚才回退的任务）
+                new_queue_level, new_queue_tasks = get_highest_priority_queue()
+                if not new_queue_level:
+                    return False, "No tasks in any queue after preemption"
             else:
                 # 当前队列优先级更高，不允许抢占
                 return False, f"Cannot start {new_queue_level} queue (priority {new_priority}): {current_queue_level} queue (priority {current_priority}) is running with higher priority"
@@ -627,13 +632,23 @@ def start_task_execution() -> tuple[bool, str]:
         if not targets:
             return False, f"No valid targets found for {new_queue_level} queue tasks"
         
+        # 如果发生了抢占，等待一段时间让ROS2系统稳定
+        if should_preempt:
+            import time
+            log_task_operation(f"{new_queue_level}_queue", "preemption_delay", "waiting_for_system_stabilization")
+            time.sleep(0.5)  # 等待500毫秒让系统稳定
+        
         # 步骤1：发送多目标导航命令到ROS2
         nav_success, nav_error = send_multi_nav_command_with_retry(targets)
         if not nav_success:
             log_task_operation(f"{new_queue_level}_queue", "start_failed", "ros2_nav_command_failed")
             return False, f"Failed to send navigation command for {new_queue_level} queue: {nav_error}"
         
-        # 步骤2：立即发送第一个next指令启动机器人
+        # 步骤2：如果发生了抢占，增加额外延时后再发送next指令
+        if should_preempt:
+            time.sleep(0.3)  # 抢占后额外等待300毫秒
+        
+        # 立即发送第一个next指令启动机器人
         next_success, next_error = send_next_command_with_retry()
         if not next_success:
             log_task_operation(f"{new_queue_level}_queue", "next_command_failed", "initial_start_command")
@@ -660,7 +675,9 @@ def start_task_execution() -> tuple[bool, str]:
         
         success_message = f"{new_queue_level} queue started successfully with {len(targets)} targets: {task_ids}"
         if should_preempt:
-            success_message = f"PREEMPTED: {preempt_message}. {success_message}"
+            # 统计重新调度的任务
+            total_tasks_in_queue = len(task_queues[new_queue_level]) + len(new_queue_tasks)
+            success_message = f"PREEMPTED: {preempt_message}. Rescheduled {total_tasks_in_queue} total tasks in {new_queue_level} queue. {success_message}"
         
         return True, success_message
 
