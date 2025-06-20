@@ -21,7 +21,7 @@ app.add_middleware(
 app.include_router(task_router, prefix="/api/tasks")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(pickup_router, prefix="/api/pickup")
-app.include_router(user_router, prefix="")
+app.include_router(user_router, prefix="/api/user")
 app.include_router(location_router, prefix="/api/locations")
 
 if __name__ == "__main__":

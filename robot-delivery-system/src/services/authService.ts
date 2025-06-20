@@ -60,7 +60,7 @@ export class AuthService {
   // 获取所有用户列表（用于前端用户选择）
   async getAllUsers(): Promise<User[]> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/users`)
+      const response = await axios.get(`${API_BASE_URL}/api/user`)
       return response.data
     } catch (error) {
       console.error('获取用户列表失败:', error)
@@ -71,7 +71,7 @@ export class AuthService {
   // 根据用户ID获取用户信息
   async getUserById(userId: string): Promise<User | null> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/users/${userId}`)
+      const response = await axios.get(`${API_BASE_URL}/api/user/${userId}`)
       return response.data
     } catch (error) {
       console.error('获取用户信息失败:', error)

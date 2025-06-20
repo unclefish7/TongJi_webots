@@ -1,11 +1,11 @@
 [
   {
     "locker_id": "LOCKER_001",
-    "status": "in_use"
+    "status": "available"
   },
   {
     "locker_id": "LOCKER_002",
-    "status": "in_use"
+    "status": "available"
   },
   {
     "locker_id": "LOCKER_003",
