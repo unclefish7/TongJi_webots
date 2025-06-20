@@ -47,7 +47,7 @@ export class ROSConnection {
   private trackingInterval: number | null = null
   private isTracking = false
   
-  constructor(private rosUrl: string = 'ws://localhost:9090') {}
+  constructor(private rosUrl: string = 'ws://192.168.44.129:9090') {}
 
   async connect(): Promise<boolean> {
     return new Promise((resolve, reject) => {

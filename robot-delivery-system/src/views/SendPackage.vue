@@ -18,7 +18,7 @@
               </div>
             </template>
 
-            <el-form :model="sendForm" :rules="sendRules" ref="sendFormRef" label-width="8vw">
+            <el-form :model="sendForm" :rules="sendRules" ref="sendFormRef" label-width="7vw">
               <!-- 身份认证 -->
               <el-form-item label="身份认证" prop="authenticated">
                 <div class="auth-section">
@@ -120,19 +120,42 @@
 
               <!-- 收件地址 -->
               <el-form-item label="收件地址" prop="destination">
-                <el-select
-                  v-model="sendForm.destination"
-                  placeholder="请选择收件地址"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="location in locationOptions"
-                    :key="location.value"
-                    :label="location.label"
-                    :value="location.value"
-                  />
-                </el-select>
+                <div class="destination-input-group">
+                  <el-select
+                    v-model="sendForm.destination"
+                    placeholder="请选择收件地址"
+                    style="flex: 1; min-width: 300px; width: 100%"
+                  >
+                    <el-option
+                      v-for="location in locationOptions"
+                      :key="location.value"
+                      :label="location.label"
+                      :value="location.value"
+                    />
+                  </el-select>
+                  
+                  <!-- 语音输入按钮 -->
+                  <el-button 
+                    @click="showVoiceRecorder = true"
+                    type="primary"
+                    class="voice-input-btn"
+                    title="语音选择地点"
+                  >
+                    <el-icon><Microphone /></el-icon>
+                    语音
+                  </el-button>
+                </div>
               </el-form-item>
+
+              <!-- 语音录制对话框 -->
+              <el-dialog
+                v-model="showVoiceRecorder"
+                title="语音选择地点"
+                width="600px"
+                :close-on-click-modal="false"
+              >
+                <VoiceRecorder @location-selected="handleVoiceLocationSelected" />
+              </el-dialog>
 
               <!-- L3级别收件人信息 -->
               <el-form-item
@@ -361,7 +384,8 @@ import { taskApiService } from '@/services/taskApiService'
 import { systemStatusService } from '@/services/systemStatusService'
 import { userApiService } from '@/services/userApiService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
-import { Box, Lock, Upload, Grid, InfoFilled } from '@element-plus/icons-vue'
+import VoiceRecorder from '@/components/VoiceRecorder.vue'
+import { Box, Lock, Upload, Grid, InfoFilled, Microphone } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const robotStore = useRobotStore()
@@ -445,6 +469,7 @@ onMounted(async () => {
 const sendFormRef = ref()
 const showAuthModal = ref(false)
 const showSuccessDialog = ref(false)
+const showVoiceRecorder = ref(false)
 const isSubmitting = ref(false)
 const selectedCompartment = ref<any>(null)
 const sendTime = ref('')
@@ -506,6 +531,20 @@ const onSecurityLevelChange = () => {
 const handleAuthSuccess = (user: any, authResult: any) => {
   ElMessage.success(`身份认证成功，获得${user.auth_level}级别权限`)
   console.log('认证成功:', user, authResult)
+}
+
+// 语音选择地点处理
+const handleVoiceLocationSelected = (location: string) => {
+  // 在地点选项中查找匹配的选项
+  const matchedOption = locationOptions.value.find(option => option.label === location)
+  
+  if (matchedOption) {
+    sendForm.destination = matchedOption.value
+    showVoiceRecorder.value = false
+    ElMessage.success(`已自动选择地点: ${location}`)
+  } else {
+    ElMessage.warning(`未找到匹配的地点选项: ${location}`)
+  }
 }
 
 const submitSend = async () => {
@@ -929,6 +968,42 @@ const sendAnother = () => {
 
 .compartment-info {
   margin: 2vh 0;
+}
+
+/* 语音输入相关样式 */
+.destination-input-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-width: 400px; /* 增加最小宽度 */
+}
+
+.destination-input-group .el-select {
+  flex: 1;
+  min-width: 320px; /* 确保选择框有足够宽度 */
+}
+
+.voice-input-btn {
+  flex-shrink: 0;
+  min-width: 80px;
+  height: 40px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.voice-input-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #7b8ce8 0%, #8559b5 100%);
+}
+
+.voice-input-btn:active {
+  transform: translateY(0);
 }
 
 /* 动画效果 */

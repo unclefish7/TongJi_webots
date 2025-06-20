@@ -6,15 +6,13 @@
         <el-button @click="connectToROS" :disabled="isConnected" type="primary">
           {{ isConnected ? '已连接' : '连接ROS' }}
         </el-button>
-        <el-button @click="requestMap" :disabled="!isConnected" type="success">
-          获取地图
-        </el-button>
+
         <el-button @click="toggleRobotTracking" :disabled="!isConnected" :type="isTrackingRobot ? 'warning' : 'info'">
           {{ isTrackingRobot ? '停止追踪' : '开始追踪' }}
         </el-button>
-        <el-button @click="centerOnRobot" :disabled="!robotPosition" size="small">
+        <!-- <el-button @click="centerOnRobot" :disabled="!robotPosition" size="small">
           <el-icon><Aim /></el-icon>
-        </el-button>
+        </el-button> -->
         <el-button @click="resetView" size="small" type="info">
           重置视图
         </el-button>
@@ -99,6 +97,7 @@ const connectToROS = async () => {
       })
     })
     
+    // resetView() 
     ElMessage.success('成功连接到ROS')
   } catch (error) {
     ElMessage.error('连接ROS失败')
@@ -267,7 +266,7 @@ const drawROSRobot = (ctx: CanvasRenderingContext2D, robot: RobotPosition, map: 
   
   // 专门为ROS地图优化的机器人尺寸 - 大幅缩小但保证可见
   const baseSize = Math.max(0.5, 1.0 / scale.value) // 减小基础尺寸
-  const robotRadius = baseSize / map.resolution
+  const robotRadius = baseSize / map.resolution/ 3.0
   const arrowLength = (baseSize * 1.2) / map.resolution // 减小箭头长度
   const arrowWidth = (baseSize * 0.3) / map.resolution // 减小箭头宽度
   const lineWidth = Math.max(0.5, (baseSize * 0.15) / map.resolution) // 减小线宽
@@ -279,7 +278,7 @@ const drawROSRobot = (ctx: CanvasRenderingContext2D, robot: RobotPosition, map: 
   ctx.fill()
   
   // 绘制机器人边框
-  ctx.strokeStyle = 'darkred'
+  ctx.strokeStyle = 'red'
   ctx.lineWidth = lineWidth
   ctx.beginPath()
   ctx.arc(0, 0, robotRadius, 0, 2 * Math.PI)
@@ -434,19 +433,19 @@ const scheduleRedraw = () => {
 onMounted(() => {
   nextTick(() => {
     resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
+    // window.addEventListener('resize', resizeCanvas)
     
     // 自动连接ROS并开始实时追踪
-    setTimeout(() => {
-      connectToROS().then(() => {
-        if (isConnected.value) {
-          requestMap()
-          setTimeout(() => {
-            toggleRobotTracking()
-          }, 1000) // 等待地图加载后开始追踪
-        }
-      })
-    }, 500) // 延迟半秒确保组件完全初始化
+    // setTimeout(() => {
+    //   connectToROS().then(() => {
+    //     if (isConnected.value) {
+    //       requestMap()
+    //       setTimeout(() => {
+    //         toggleRobotTracking()
+    //       }, 1000) // 等待地图加载后开始追踪
+    //     }
+    //   })
+    // }, 500) // 延迟半秒确保组件完全初始化
   })
 })
 

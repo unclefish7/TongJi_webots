@@ -187,7 +187,7 @@ const formatTime = (timeStr: string) => {
 
 <style scoped>
 .locker-status-card {
-  height: 100%;
+  height: 80%;
   margin-bottom: 1rem;
 }
 

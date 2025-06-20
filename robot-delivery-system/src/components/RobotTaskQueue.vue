@@ -68,7 +68,7 @@
           <div class="task-content">
             <div class="task-location">
               <el-icon><Location /></el-icon>
-              目标: {{ task.location_label || task.location_id }}
+              目标: {{ task.location_id }}
             </div>
             <div class="task-user">
               <el-icon><User /></el-icon>
@@ -166,8 +166,8 @@ const refreshQueue = async () => {
       const allTasks: TaskData[] = []
       
       // 添加所有队列中的任务
-      if (statusResponse.data.queue_details) {
-        Object.values(statusResponse.data.queue_details).forEach((levelTasks: any) => {
+      if (statusResponse.data.queue_summary) {
+        Object.values(statusResponse.data.queue_summary).forEach((levelTasks: any) => {
           if (Array.isArray(levelTasks)) {
             allTasks.push(...levelTasks)
           }
