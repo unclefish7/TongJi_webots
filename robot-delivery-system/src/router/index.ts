@@ -29,11 +29,6 @@ const router = createRouter({
       name: 'receive',
       component: () => import('../views/ReceivePackage.vue'),
     },
-    {
-      path: '/test',
-      name: 'apiTest',
-      component: () => import('../views/ApiTestView.vue'),
-    },
   ],
 })
 
