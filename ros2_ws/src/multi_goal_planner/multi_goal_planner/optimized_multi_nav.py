@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
+from action_msgs.msg import GoalStatus
 from std_msgs.msg import String
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
@@ -22,7 +23,7 @@ class OptimizedMultiNav(Node):
         
         # API端点配置
         self.API_BASE_URL = "http://localhost:8000"
-        self.ARRIVED_API_ENDPOINT = f"{self.API_BASE_URL}/api/robot/arrived"
+        self.ARRIVED_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/arrived"
         
         # 创建订阅者
         self.subscription = self.create_subscription(
@@ -58,6 +59,8 @@ class OptimizedMultiNav(Node):
         self.current_goal_index = 0
         self.is_navigating = False
         self.waiting_for_next = False  # 标记是否在等待next信号
+        self.current_goal_handle = None  # 保存当前的目标句柄用于取消
+        self.task_cancelled = False  # 标记任务是否被取消
         
         self.get_logger().info('Optimized Multi Navigation node initialized')
         self.get_logger().info('Using TF to get current robot position')
@@ -65,16 +68,48 @@ class OptimizedMultiNav(Node):
 
     def next_callback(self, msg):
         """处理next信号，继续到下一个目标点"""
-        # 恢复等待next的判断
+        self.get_logger().info(f'Received next signal: {msg.data}')
+        self.get_logger().info(f'Current state - waiting_for_next: {self.waiting_for_next}, goals available: {len(self.current_goals)}, current_index: {self.current_goal_index}')
+        
         if msg.data == "start" or msg.data == "continue":
-            if self.waiting_for_next and self.current_goals:
-                self.get_logger().info('Received next signal, continuing to next goal...')
+            if self.waiting_for_next and self.current_goals and self.current_goal_index < len(self.current_goals):
+                self.get_logger().info(f'Received next signal, continuing to goal {self.current_goal_index + 1}/{len(self.current_goals)}...')
                 self.waiting_for_next = False
                 self.navigate_to_next_goal()
             else:
-                self.get_logger().warn('Received next signal but not waiting for it or no goals available')
+                reason = []
+                if not self.waiting_for_next:
+                    reason.append("not waiting for next")
+                if not self.current_goals:
+                    reason.append("no goals available")
+                if self.current_goal_index >= len(self.current_goals):
+                    reason.append("all goals completed")
+                self.get_logger().warn(f'Received next signal but cannot continue: {", ".join(reason)}')
         else:
             self.get_logger().warn(f'Unrecognized next command: {msg.data}')
+
+    def cancel_current_navigation(self):
+        """取消当前的导航任务"""
+        try:
+            if self.current_goal_handle is not None:
+                self.get_logger().info('Canceling current navigation goal')
+                cancel_future = self.current_goal_handle.cancel_goal_async()
+                # 不等待取消结果，直接继续
+                self.current_goal_handle = None
+            
+            # 重置导航状态
+            self.is_navigating = False
+            self.waiting_for_next = False
+            # 标记当前任务已被取消，避免处理取消结果
+            self.task_cancelled = True
+            
+        except Exception as e:
+            self.get_logger().warn(f'Error canceling navigation: {str(e)}')
+            # 即使取消失败，也要重置状态
+            self.is_navigating = False
+            self.waiting_for_next = False
+            self.current_goal_handle = None
+            self.task_cancelled = True
 
     def get_current_position(self):
         """使用TF获取机器人当前位置"""
@@ -253,13 +288,15 @@ class OptimizedMultiNav(Node):
                 self.get_logger().error('No valid goals found')
                 return
             
-            # 如果正在导航，停止当前导航
-            if self.is_navigating:
-                self.get_logger().info('Canceling current navigation')
-                self.nav_client.cancel_all_goals()
-                
+            # 如果正在导航或等待next信号，取消当前任务并切换到新任务
+            if self.is_navigating or self.waiting_for_next:
+                self.get_logger().info('Switching to new navigation task, canceling current task')
+                self.cancel_current_navigation()
+            
             # 重置状态
             self.waiting_for_next = False
+            self.is_navigating = False
+            self.task_cancelled = False  # 重置取消标记
             
             # 计算最优路径（以当前位置为起点）
             optimized_goals = self.optimize_path(valid_goals)
@@ -310,6 +347,7 @@ class OptimizedMultiNav(Node):
         # 发送导航目标
         self.is_navigating = True
         self.waiting_for_next = False
+        self.task_cancelled = False  # 重置取消标记
         future = self.nav_client.send_goal_async(goal_msg)
         future.add_done_callback(self.navigation_response_callback)
 
@@ -341,9 +379,13 @@ class OptimizedMultiNav(Node):
         if not goal_handle.accepted:
             self.get_logger().error('Navigation goal rejected')
             self.is_navigating = False
+            self.current_goal_handle = None
             return
         
         self.get_logger().info('Navigation goal accepted')
+        
+        # 保存目标句柄用于后续取消操作
+        self.current_goal_handle = goal_handle
         
         # 等待结果
         result_future = goal_handle.get_result_async()
@@ -384,32 +426,57 @@ class OptimizedMultiNav(Node):
 
     def navigation_result_callback(self, future):
         """处理导航结果"""
-        result = future.result().result
+        # 如果任务已被取消，忽略这个结果回调
+        if self.task_cancelled:
+            self.get_logger().info('Ignoring navigation result - task was cancelled')
+            return
         
-        goal_name = self.current_goals[self.current_goal_index]
-        
-        if result:
-            self.get_logger().info(f'Successfully reached: {goal_name}')
-        else:
-            self.get_logger().warn(f'Failed to reach: {goal_name}')
-        
-        # 移动到下一个目标索引
-        self.current_goal_index += 1
-        self.is_navigating = False
-        
-        # 通知后端API机器人已到达
-        api_notified = self.notify_backend_arrived()
-        if not api_notified:
-            self.get_logger().warn('Backend API notification failed, but continuing with navigation process')
-        
-        # 检查是否还有更多目标
-        if self.current_goal_index < len(self.current_goals):
-            next_goal_name = self.current_goals[self.current_goal_index]
-            self.get_logger().info(f'Reached {goal_name}. Waiting for /next signal to continue to: {next_goal_name}')
-            self.waiting_for_next = True
-        else:
-            self.get_logger().info('All goals completed!')
-            self.waiting_for_next = False
+        try:
+            result_wrapper = future.result()
+            status = result_wrapper.status
+            result = result_wrapper.result
+            
+            if status == GoalStatus.STATUS_SUCCEEDED:
+                goal_name = self.current_goals[self.current_goal_index]
+                self.get_logger().info(f'Successfully reached: {goal_name}')
+                
+                # 移动到下一个目标索引
+                self.current_goal_index += 1
+                self.is_navigating = False
+                self.current_goal_handle = None  # 清理目标句柄
+                
+                self.get_logger().info(f'Updated state - current_index: {self.current_goal_index}, total_goals: {len(self.current_goals)}')
+                
+                # 通知后端API机器人已到达
+                api_notified = self.notify_backend_arrived()
+                if not api_notified:
+                    self.get_logger().warn('Backend API notification failed, but continuing with navigation process')
+                
+                # 检查是否还有更多目标
+                if self.current_goal_index < len(self.current_goals):
+                    next_goal_name = self.current_goals[self.current_goal_index]
+                    self.get_logger().info(f'Reached {goal_name}. Waiting for /next signal to continue to: {next_goal_name}')
+                    self.waiting_for_next = True
+                    self.get_logger().info(f'Set waiting_for_next = True, please send next signal')
+                else:
+                    self.get_logger().info('All goals completed!')
+                    self.waiting_for_next = False
+                    
+            elif status == GoalStatus.STATUS_CANCELED:
+                self.get_logger().info('Navigation goal was cancelled')
+                self.is_navigating = False
+                self.current_goal_handle = None
+                
+            else:
+                goal_name = self.current_goals[self.current_goal_index] if self.current_goal_index < len(self.current_goals) else "unknown"
+                self.get_logger().warn(f'Navigation failed to reach: {goal_name} (Status: {status})')
+                self.is_navigating = False
+                self.current_goal_handle = None
+                
+        except Exception as e:
+            self.get_logger().error(f'Error processing navigation result: {str(e)}')
+            self.is_navigating = False
+            self.current_goal_handle = None
 
 
 def main(args=None):
