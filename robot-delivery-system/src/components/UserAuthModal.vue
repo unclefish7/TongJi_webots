@@ -2,7 +2,7 @@
   <el-dialog 
     v-model="visible" 
     title="身份认证" 
-    width="600px" 
+    width="60vw" 
     :before-close="handleClose"
     :close-on-click-modal="false"
   >
