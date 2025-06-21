@@ -6,6 +6,7 @@ from api.auth_api import router as auth_router
 from api.pickup_api import router as pickup_router
 from api.user_api import router as user_router
 from api.location_api import router as location_router
+from api.voice_api import router as voice_router
 
 app = FastAPI(title="Secure Robot API")
 
@@ -23,6 +24,7 @@ app.include_router(auth_router, prefix="/api/auth")
 app.include_router(pickup_router, prefix="/api/pickup")
 app.include_router(user_router, prefix="/api/user")
 app.include_router(location_router, prefix="/api/locations")
+app.include_router(voice_router, prefix="/api/voice")
 
 if __name__ == "__main__":
     import uvicorn
