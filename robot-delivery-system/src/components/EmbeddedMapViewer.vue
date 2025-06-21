@@ -10,7 +10,7 @@
                     :type="isTrackingRobot ? 'warning' : 'primary'">
                     {{ isTrackingRobot ? '停止追踪' : '开始追踪' }}
                 </el-button>
-                <el-button @click="centerOnRobot" :disabled="!robotPosition" size="small">
+                <el-button @click="onClickCenterOnRobot" :disabled="!robotPosition" size="small">
                     <el-icon>
                         <Aim />
                     </el-icon>
@@ -72,6 +72,12 @@ import { ElButton, ElButtonGroup, ElMessage, ElIcon } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
 import { rosConnection, type MapData, type RobotPosition } from '@/services/rosConnection'
 import { throttle } from 'lodash-es'
+
+// --- 机器人位置微调偏移量（以米为单位，确保缩放一致性） ---
+const ROBOT_POSITION_OFFSET = {
+    x: -5,  // X轴偏移：负数向左，正数向右（米）
+    y: 2     // Y轴偏移：正数向北，负数向南（米）
+}
 
 // --- 响应式状态 ---
 const isConnected = ref(false)
@@ -240,12 +246,17 @@ const drawRobotLayer = () => {
     const { resolution, origin, height } = mapData.value
     const { x, y } = robotPosition.value
 
-    // 将ROS世界坐标 (米) 转换为地图像素坐标
-    const robotMapX = (x - origin.position.x) / resolution
-    const robotMapY = height - ((y - origin.position.y) / resolution) // Y轴翻转
+    // 应用微调偏移量（在世界坐标系中）
+    const adjustedX = x + ROBOT_POSITION_OFFSET.x
+    const adjustedY = y + ROBOT_POSITION_OFFSET.y
+
+    // 将调整后的ROS世界坐标 (米) 转换为地图像素坐标
+    const robotMapX = (adjustedX - origin.position.x) / resolution
+    const robotMapY = height - ((adjustedY - origin.position.y) / resolution) // Y轴翻转
 
     // 调试信息：确保坐标计算正确
     console.log('Robot position:', { x, y })
+    console.log('Adjusted position:', { adjustedX, adjustedY })
     console.log('Map origin:', origin.position)
     console.log('Robot map coordinates:', { robotMapX, robotMapY })
 
@@ -371,9 +382,14 @@ const centerOnRobot = (redraw = true) => {
     if (!robotPosition.value || !mapData.value) return
 
     const { resolution, origin, width, height } = mapData.value
+
+    // 应用相同的微调偏移量
+    const adjustedX = robotPosition.value.x + ROBOT_POSITION_OFFSET.x
+    const adjustedY = robotPosition.value.y + ROBOT_POSITION_OFFSET.y
+
     // 使用与drawRobotLayer完全相同的坐标转换
-    const robotMapX = (robotPosition.value.x - origin.position.x) / resolution
-    const robotMapY = height - ((robotPosition.value.y - origin.position.y) / resolution) // Y轴翻转
+    const robotMapX = (adjustedX - origin.position.x) / resolution
+    const robotMapY = height - ((adjustedY - origin.position.y) / resolution) // Y轴翻转
 
     const mapCenterPx = { x: width / 2, y: height / 2 }
 
@@ -399,6 +415,11 @@ const centerOnRobot = (redraw = true) => {
         scheduleRedraw()
     }
 }
+
+const onClickCenterOnRobot = (evt: MouseEvent) => {
+    centerOnRobot(true)  // 保留你原来的逻辑
+}
+
 
 // 重置视图到初始状态
 const resetView = () => {
