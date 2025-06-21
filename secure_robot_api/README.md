@@ -1,6 +1,64 @@
 # Secure Robot API - 任务调度系统
 
-这是一个基于优先级的机器人任务调度API系统，支持多优先级队列管理和智能任务调度。
+这是一个基于优先级的机器人任务调度API系统，支持多优先级队列管理和智能任务调度。同时集成了语音识别功能，支持通过语音指令进行地点选择。
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+# 安装基础依赖
+pip install -r requirements.txt
+
+# 安装语音识别依赖
+pip install -r requirements_voice.txt
+```
+
+### 2. 配置环境变量
+
+复制环境配置示例文件并修改：
+
+```bash
+cp .env.example .env
+```
+
+在`.env`文件中设置您的OpenAI API密钥：
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+### 3. 设置语音识别模型
+
+```bash
+# 运行Vosk模型下载脚本
+./setup_vosk.sh
+```
+
+### 4. 启动服务
+
+```bash
+# 启动API服务
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## 语音识别功能
+
+### 支持的功能
+- **语音转文本**: 使用Vosk进行本地语音识别
+- **智能语义分析**: 使用LLM进行语义理解和地点提取
+- **多种音频格式**: 支持WAV、MP3、M4A等格式
+- **实时处理**: 前端录音，后端实时处理
+
+### API接口
+- `POST /voice/recognize` - 语音识别接口
+- `GET /voice/locations` - 获取可用地点列表
+- `POST /voice/test-recognition` - 测试文本地点提取
+
+### 支持的地点
+- 经理室、财务处、等候处、前台、休息室
+- 小办公区、大办公区、小会议室、大会议室
 
 ## 任务调度方法
 

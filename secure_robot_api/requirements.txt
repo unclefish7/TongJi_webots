@@ -9,3 +9,6 @@ pytest
 httpx 
 pytest-asyncio
 lark
+openai>=1.0.0
+python-dotenv
+requests

@@ -82,12 +82,13 @@ async def test_voice_recognition(text: str):
     - **text**: 要测试的文本内容
     """
     try:
-        location, keywords = voice_service.extract_location(text)
+        location, keywords, analysis_method = voice_service.extract_location(text)
         
         return {
             "input_text": text,
             "extracted_location": location,
             "matched_keywords": keywords,
+            "analysis_method": analysis_method,
             "available_locations": list(voice_service.location_keywords.keys())
         }
     except Exception as e:

@@ -8,6 +8,13 @@ import vosk
 import librosa
 import soundfile as sf
 import numpy as np
+import openai
+from openai import OpenAI
+from dotenv import load_dotenv
+from .offline_llm_service import get_offline_llm_service
+
+# 加载环境变量
+load_dotenv()
 
 class VoiceRecognitionService:
     """语音识别服务类"""
@@ -26,10 +33,20 @@ class VoiceRecognitionService:
             "大会议室": ["大会议室", "大会议", "主会议室"]
         }
         
+        # 支持的地点列表（用于LLM分析）
+        self.available_locations = list(self.location_keywords.keys())
+        
         # 初始化Vosk模型
         self.model = None
         self.rec = None
         self._init_model()
+        
+        # 初始化OpenAI客户端
+        self.openai_client = None
+        self._init_llm()
+        
+        # 初始化离线LLM服务
+        self.offline_llm = get_offline_llm_service()
     
     def _init_model(self):
         """初始化Vosk语音识别模型"""
@@ -60,6 +77,26 @@ class VoiceRecognitionService:
             print(f"Vosk模型初始化失败: {e}")
             self.model = None
             self.rec = None
+    
+    def _init_llm(self):
+        """初始化LLM客户端"""
+        try:
+            # 从环境变量获取API密钥
+            api_key = os.getenv('OPENAI_API_KEY')
+            base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')  # 支持自定义端点
+            
+            if api_key:
+                self.openai_client = OpenAI(
+                    api_key=api_key,
+                    base_url=base_url
+                )
+                print("LLM客户端初始化成功")
+            else:
+                print("警告: 未设置OPENAI_API_KEY环境变量，将使用传统关键词匹配")
+                
+        except Exception as e:
+            print(f"LLM客户端初始化失败: {e}")
+            self.openai_client = None
     
     def preprocess_audio(self, audio_file_path: str) -> str:
         """
@@ -141,9 +178,109 @@ class VoiceRecognitionService:
             print(f"语音识别失败: {e}")
             return ""
     
-    def extract_location(self, text: str) -> Tuple[Optional[str], List[str]]:
+    def extract_location(self, text: str) -> Tuple[Optional[str], List[str], str]:
         """
-        从识别文本中提取地点信息
+        从识别文本中提取地点信息，优先使用离线LLM，然后在线LLM，最后关键词匹配
+        
+        Args:
+            text: 识别出的文本
+            
+        Returns:
+            (匹配的地点名称, 所有可能的匹配关键词, 分析方法)
+        """
+        if not text:
+            return None, [], "Keywords"
+        
+        # 1. 优先使用离线LLM进行语义分析
+        if self.offline_llm.is_available:
+            try:
+                offline_result = self.offline_llm.analyze_location_intent(text, self.available_locations)
+                if offline_result:
+                    return offline_result, [], "Offline-LLM"
+            except Exception as e:
+                print(f"离线LLM分析失败: {e}")
+        
+        # 2. 回退到在线LLM
+        if self.openai_client:
+            try:
+                online_result = self._analyze_with_llm(text)
+                if online_result:
+                    return online_result, [], "Online-LLM"
+            except Exception as e:
+                print(f"在线LLM分析失败，继续回退到关键词匹配: {e}")
+        
+        # 3. 最终回退到传统关键词匹配
+        location, keywords = self._extract_location_by_keywords(text)
+        return location, keywords, "Keywords"
+    
+    def _analyze_with_llm(self, text: str) -> Optional[str]:
+        """
+        使用LLM分析用户意图并提取地点
+        
+        Args:
+            text: 用户语音识别的文本
+            
+        Returns:
+            匹配的地点名称，如果没有匹配返回None
+        """
+        if not self.openai_client:
+            return None
+            
+        try:
+            # 构建提示词
+            prompt = f"""
+你是一个智能语音助手，需要从用户的语音指令中识别目的地。
+
+可选择的地点列表：
+{', '.join(self.available_locations)}
+
+用户说的话："{text}"
+
+请分析用户想要去哪个地点。如果用户的话中包含明确的地点信息，请返回最匹配的地点名称。如果无法确定或没有提到地点，请返回"无法确定"。
+
+要求：
+1. 只返回地点名称，不要其他解释
+2. 必须从上述地点列表中选择
+3. 如果用户提到了"经理"、"老板"等，对应"经理室"
+4. 如果用户提到了"财务"、"会计"等，对应"财务处"
+5. 如果用户提到了"前台"、"接待"等，对应"前台"
+6. 如果用户提到了"等候"、"等待"等，对应"等候处"
+7. 如果用户提到了"休息"、"茶水间"等，对应"休息室"
+8. 如果用户提到了"办公"但没有明确大小，对应"大办公区"
+9. 如果用户提到了"会议"但没有明确大小，对应"大会议室"
+
+请直接回答地点名称：
+"""
+
+            # 调用LLM
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",  # 或者使用其他模型
+                messages=[
+                    {"role": "system", "content": "你是一个专业的语音助手，专门识别用户想要去的地点。"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,
+                max_tokens=50
+            )
+            
+            result = response.choices[0].message.content.strip()
+            
+            # 验证结果是否在可选地点中
+            if result in self.available_locations:
+                print(f"LLM识别地点: {result}")
+                return result
+            elif result != "无法确定":
+                print(f"LLM返回了无效地点: {result}")
+                
+            return None
+            
+        except Exception as e:
+            print(f"LLM分析出错: {e}")
+            return None
+    
+    def _extract_location_by_keywords(self, text: str) -> Tuple[Optional[str], List[str]]:
+        """
+        使用传统关键词匹配提取地点（作为LLM的回退方案）
         
         Args:
             text: 识别出的文本
@@ -151,9 +288,6 @@ class VoiceRecognitionService:
         Returns:
             (匹配的地点名称, 所有可能的匹配关键词)
         """
-        if not text:
-            return None, []
-        
         text = text.replace(" ", "").lower()  # 移除空格并转换为小写
         matched_locations = []
         
@@ -186,13 +320,14 @@ class VoiceRecognitionService:
         recognized_text = self.recognize_speech(audio_file_path)
         
         # 提取地点
-        location, keywords = self.extract_location(recognized_text)
+        location, keywords, analysis_method = self.extract_location(recognized_text)
         
         return {
             "success": bool(recognized_text),
             "text": recognized_text,
             "location": location,
             "matched_keywords": keywords,
+            "analysis_method": analysis_method,
             "available_locations": list(self.location_keywords.keys())
         }
     
