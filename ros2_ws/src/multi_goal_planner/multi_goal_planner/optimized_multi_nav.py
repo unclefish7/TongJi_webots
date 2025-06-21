@@ -24,6 +24,7 @@ class OptimizedMultiNav(Node):
         # API端点配置
         self.API_BASE_URL = "http://localhost:8000"
         self.ARRIVED_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/arrived"
+        self.OPTIMIZED_ORDER_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/optimized_order"
         
         # 创建订阅者
         self.subscription = self.create_subscription(
@@ -302,6 +303,15 @@ class OptimizedMultiNav(Node):
             optimized_goals = self.optimize_path(valid_goals)
             self.get_logger().info(f'Optimized path from current position: {optimized_goals}')
             
+            # 通知后端API优化后的执行顺序
+            if optimized_goals != valid_goals:
+                self.get_logger().info('Task order was optimized, notifying backend API...')
+                api_notified = self.notify_backend_optimized_order(valid_goals, optimized_goals)
+                if not api_notified:
+                    self.get_logger().warn('Failed to notify backend API about optimized order, but continuing with navigation')
+            else:
+                self.get_logger().info('Task order unchanged after optimization')
+            
             # 准备导航
             self.current_goals = optimized_goals
             self.current_goal_index = 0
@@ -311,6 +321,9 @@ class OptimizedMultiNav(Node):
             first_goal_name = self.current_goals[0] if self.current_goals else "unknown"
             self.get_logger().info(f'Task ready! Waiting for /next signal to start navigation to: {first_goal_name}')
             self.get_logger().info('Please publish: ros2 topic pub --once /next std_msgs/String "data: \'start\'"')
+            
+            # 通知后端API优化后的任务执行顺序
+            self.notify_backend_optimized_order(valid_goals, optimized_goals)
             
         except json.JSONDecodeError:
             self.get_logger().error('Invalid JSON format in command')
@@ -422,6 +435,47 @@ class OptimizedMultiNav(Node):
             return False
         except Exception as e:
             self.get_logger().error(f'Error notifying backend API: {str(e)}')
+            return False
+
+    def notify_backend_optimized_order(self, original_goals, optimized_goals):
+        """通知后端API优化后的任务执行顺序"""
+        try:
+            self.get_logger().info(f'Notifying backend API: optimized order changed')
+            self.get_logger().info(f'Original order: {original_goals}')
+            self.get_logger().info(f'Optimized order: {optimized_goals}')
+            
+            # 构建请求数据
+            request_data = {
+                "original_order": original_goals,
+                "optimized_order": optimized_goals
+            }
+            
+            # 发送POST请求到后端API
+            response = requests.post(
+                self.OPTIMIZED_ORDER_API_ENDPOINT,
+                json=request_data,
+                headers={'Content-Type': 'application/json'},
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                self.get_logger().info('Successfully notified backend API about optimized order')
+                data = response.json()
+                self.get_logger().info(f'Backend response: {data.get("message", "No message")}')
+                return True
+            else:
+                self.get_logger().error(f'Failed to notify backend API about optimized order: HTTP {response.status_code}')
+                self.get_logger().error(f'Response: {response.text[:100]}')
+                return False
+                
+        except requests.exceptions.ConnectionError:
+            self.get_logger().error('Connection error: Backend API not available for optimized order notification')
+            return False
+        except requests.exceptions.Timeout:
+            self.get_logger().error('Timeout error: Backend API took too long to respond to optimized order notification')
+            return False
+        except Exception as e:
+            self.get_logger().error(f'Error notifying backend API about optimized order: {str(e)}')
             return False
 
     def navigation_result_callback(self, future):

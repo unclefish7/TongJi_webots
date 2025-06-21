@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException
 from services.task_service import (
     create_task, complete_task, fail_task, TaskErrorCodes,
     remove_task_from_queue, handle_robot_arrival, send_next_to_robot,
-    get_queue_status, start_task_execution, check_ros2_bridge_connection
+    get_queue_status, start_task_execution, check_ros2_bridge_connection,
+    clear_arrived_task, handle_robot_optimized_order, set_downgrade_strategy,
+    get_current_downgrade_strategy
 )
 from services.auth_service import load_users
 from typing import Dict, List, Any
@@ -365,5 +367,107 @@ async def start_task():
             detail={
                 "code": "TASK_999",
                 "message": f"Unexpected error: {str(e)}"
+            }
+        )
+
+@router.post("/robot/optimized_order")
+async def robot_optimized_order(request: dict):
+    """
+    机器人通知优化后的任务执行顺序（由ROS2桥接调用）
+    
+    请求体包含:
+    - original_order: 原始任务顺序（位置名称列表）
+    - optimized_order: 优化后的任务顺序（位置名称列表）
+    """
+    try:
+        original_order = request.get("original_order", [])
+        optimized_order = request.get("optimized_order", [])
+        
+        success, message = handle_robot_optimized_order(original_order, optimized_order)
+        
+        return {
+            "success": success,
+            "message": message,
+            "original_order": original_order,
+            "optimized_order": optimized_order
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999", 
+                "message": f"Error handling optimized order: {str(e)}"
+            }
+        )
+
+@router.get("/downgrade/strategy")
+async def get_downgrade_strategy():
+    """
+    获取当前降级策略信息
+    
+    返回当前使用的降级策略、规则和可用策略列表
+    """
+    try:
+        strategy_info = get_current_downgrade_strategy()
+        return {
+            "success": True,
+            "data": strategy_info
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Error getting downgrade strategy: {str(e)}"
+            }
+        )
+
+@router.post("/downgrade/strategy")
+async def set_downgrade_strategy_endpoint(request: Dict[str, str]):
+    """
+    设置降级策略
+    
+    - **strategy**: 降级策略名称
+      - "step_by_step": 只有L1降级 (L3→L3, L2→L2, L1→L0, L0→L0)
+      - "flat_high": 高优先级平级回退 (L3→L1, L2→L1, L1→L0)  
+      - "all_step": 全部降一级 (L3→L2, L2→L1, L1→L0, L0→L0)
+    """
+    try:
+        strategy = request.get("strategy")
+        if not strategy:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TASK_400",
+                    "message": "Strategy parameter is required"
+                }
+            )
+        
+        success, message = set_downgrade_strategy(strategy)
+        
+        if success:
+            return {
+                "success": True,
+                "message": message,
+                "current_strategy": get_current_downgrade_strategy()
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TASK_400",
+                    "message": message
+                }
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Error setting downgrade strategy: {str(e)}"
             }
         )

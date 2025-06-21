@@ -13,7 +13,7 @@ auth_session_cache: Dict[str, List[Dict]] = {}
 pickup_auth_cache: Dict[str, Dict] = {}
 
 # 取件认证有效期（分钟）
-PICKUP_AUTH_EXPIRY_MINUTES = 5
+PICKUP_AUTH_EXPIRY_MINUTES = 30
 
 def load_users() -> List[Dict]:
     """从 users.json 加载用户数据"""

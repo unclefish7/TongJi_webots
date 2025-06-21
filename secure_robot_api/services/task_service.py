@@ -2,6 +2,7 @@ import json
 import os
 import random
 import string
+import time
 from typing import Dict, List, Optional
 from datetime import datetime
 from services.auth_service import consume_auth, get_user_by_id
@@ -9,7 +10,6 @@ from services.schema_service import create_entity_from_schema, validate_entity_a
 import requests
 from threading import Lock
 from collections import deque
-import time
 
 def load_locations() -> List[Dict]:
     """从 locations.json 加载位置数据"""
@@ -326,7 +326,7 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
     from services.log_service import log_task_status_change, log_error
     
     # 验证状态值
-    valid_statuses = ["pending", "authenticating", "delivering", "completed", "failed"]
+    valid_statuses = ["pending", "authenticating", "delivering", "arrived", "completed", "failed"]
     if new_status not in valid_statuses:
         return False, f"Invalid status: {new_status}"
     
@@ -343,6 +343,8 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
             
             # 更新时间戳
             if timestamp_field and timestamp_field in ['accepted', 'delivered']:
+                if 'timestamps' not in task:
+                    task['timestamps'] = {}
                 task['timestamps'][timestamp_field] = datetime.now().isoformat()
             
             task_found = True
@@ -358,6 +360,7 @@ def update_task_status(task_id: str, new_status: str, timestamp_field: Optional[
         return True, f"Task {task_id} status updated to {new_status}"
     except Exception as e:
         log_error(f"Failed to update task {task_id}: {str(e)}", related_task=task_id)
+        return False, f"Failed to update task {task_id}: {str(e)}"
         return False, f"Failed to update task: {str(e)}"
 
 def get_tasks_by_user(user_id: str, role: str = "all") -> List[Dict]:
@@ -474,11 +477,98 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
 
 # 任务队列管理相关代码
 
+# 降级策略配置
+class DowngradeStrategy:
+    """降级策略枚举"""
+    STEP_BY_STEP = "step_by_step"      # 逐级降级: L3→L2→L1→L0
+    FLAT_HIGH_PRIORITY = "flat_high"    # L3、L2平级回退到L1: L3→L1, L2→L1, L1→L0
+    ALL_STEP_DOWN = "all_step"          # 所有等级都降一级: L3→L2, L2→L1, L1→L0, L0→保持L0
+
+# 全局降级策略配置 - 可以通过修改这个变量来改变降级行为
+CURRENT_DOWNGRADE_STRATEGY = DowngradeStrategy.STEP_BY_STEP
+
+# 降级策略映射表
+DOWNGRADE_RULES = {
+    DowngradeStrategy.STEP_BY_STEP: {
+        "L3": "L3",  # L3降级到L3
+        "L2": "L2",  # L2降级到L2
+        "L1": "L0",  # L1降级到L0
+        "L0": "L0"   # L0不再降级
+    },
+    DowngradeStrategy.FLAT_HIGH_PRIORITY: {
+        "L3": "L1",  # L3直接降级到L1
+        "L2": "L1",  # L2直接降级到L1
+        "L1": "L0",  # L1降级到L0
+        "L0": "L0"   # L0不再降级
+    },
+    DowngradeStrategy.ALL_STEP_DOWN: {
+        "L3": "L2",  # L3降级到L2
+        "L2": "L1",  # L2降级到L1
+        "L1": "L0",  # L1降级到L0
+        "L0": "L0"   # L0保持L0（不变）
+    }
+}
+
+def get_downgrade_target(current_level: str) -> Optional[str]:
+    """
+    根据当前降级策略获取降级目标等级
+    
+    Args:
+        current_level: 当前安全等级
+        
+    Returns:
+        Optional[str]: 降级目标等级，None表示不降级
+    """
+    strategy_rules = DOWNGRADE_RULES.get(CURRENT_DOWNGRADE_STRATEGY, {})
+    return strategy_rules.get(current_level)
+
+def set_downgrade_strategy(strategy: str) -> tuple[bool, str]:
+    """
+    设置降级策略
+    
+    Args:
+        strategy: 降级策略名称
+        
+    Returns:
+        tuple[bool, str]: (是否成功, 消息)
+    """
+    global CURRENT_DOWNGRADE_STRATEGY
+    
+    if strategy not in [DowngradeStrategy.STEP_BY_STEP, DowngradeStrategy.FLAT_HIGH_PRIORITY, DowngradeStrategy.ALL_STEP_DOWN]:
+        return False, f"Invalid downgrade strategy: {strategy}. Valid options: {list(DOWNGRADE_RULES.keys())}"
+    
+    old_strategy = CURRENT_DOWNGRADE_STRATEGY
+    CURRENT_DOWNGRADE_STRATEGY = strategy
+    
+    from services.log_service import log_task_operation
+    log_task_operation("system", "downgrade_strategy_changed", f"from_{old_strategy}_to_{strategy}")
+    
+    return True, f"Downgrade strategy changed from {old_strategy} to {strategy}"
+
+def get_current_downgrade_strategy() -> Dict:
+    """
+    获取当前降级策略的详细信息
+    
+    Returns:
+        Dict: 包含策略名称和规则的详细信息
+    """
+    return {
+        "current_strategy": CURRENT_DOWNGRADE_STRATEGY,
+        "strategy_name": {
+            DowngradeStrategy.STEP_BY_STEP: "逐级降级 (L3→L2→L1→L0)",
+            DowngradeStrategy.FLAT_HIGH_PRIORITY: "高优先级平级回退 (L3→L1, L2→L1, L1→L0)",
+            DowngradeStrategy.ALL_STEP_DOWN: "全部降一级 (L3→L2, L2→L1, L1→L0, L0→L0)"
+        }.get(CURRENT_DOWNGRADE_STRATEGY, "未知策略"),
+        "rules": DOWNGRADE_RULES.get(CURRENT_DOWNGRADE_STRATEGY, {}),
+        "available_strategies": list(DOWNGRADE_RULES.keys())
+    }
+
 # 任务队列（按优先级）
 task_queues = {
     "L3": deque(),  # 最高优先级
     "L2": deque(),  # 中等优先级  
-    "L1": deque()   # 最低优先级
+    "L1": deque(),  # 最低优先级
+    "L0": deque()   # 降级队列（只接收从L1降级的任务）
 }
 
 # 队列锁
@@ -493,7 +583,10 @@ current_execution = {
     "total_count": 0,           # 总任务数量
     "waiting_for_next": False,
     "command_sent": False,  # 标记是否已发送命令
-    "started": False        # 标记是否已开始执行
+    "started": False,       # 标记是否已开始执行
+    "arrived_task": None,   # 当前到达等待取件的任务
+    "arrived_time": None,   # 到达时间
+    "pickup_timeout": 10    # 取件超时时间（秒）
 }
 
 # ROS2桥接配置
@@ -555,6 +648,17 @@ def start_task_execution() -> tuple[bool, str]:
     """
     from services.log_service import log_task_operation
     
+    # 检查是否有任务正在等待取件
+    if current_execution["arrived_task"] is not None:
+        # 检查是否超时
+        if current_execution["arrived_time"] is not None:
+            elapsed_time = time.time() - current_execution["arrived_time"]
+            if elapsed_time < current_execution["pickup_timeout"]:
+                return False, f"Cannot start new task: current task is waiting for pickup ({int(current_execution['pickup_timeout'] - elapsed_time)}s remaining)"
+            else:
+                # 超时，需要降级当前到达的任务
+                _handle_pickup_timeout()
+    
     # 首先检查ROS2桥接服务是否可用
     bridge_available, bridge_status = check_ros2_bridge_connection()
     if not bridge_available:
@@ -573,9 +677,9 @@ def start_task_execution() -> tuple[bool, str]:
         if current_execution["active"]:
             current_queue_level = current_execution["current_queue_level"]
             
-            # 获取优先级数值（L3=3, L2=2, L1=1）
+            # 获取优先级数值（L3=3, L2=2, L1=1, L0=0）
             def get_priority_value(level):
-                return {"L3": 3, "L2": 2, "L1": 1}.get(level, 0)
+                return {"L3": 3, "L2": 2, "L1": 1, "L0": 0}.get(level, 0)
             
             current_priority = get_priority_value(current_queue_level)
             new_priority = get_priority_value(new_queue_level)
@@ -605,7 +709,9 @@ def start_task_execution() -> tuple[bool, str]:
                     "total_count": 0,
                     "waiting_for_next": False,
                     "command_sent": False,
-                    "started": False
+                    "started": False,
+                    "arrived_task": None,
+                    "arrived_time": None
                 })
                 
                 log_task_operation(f"{current_queue_level}_queue", "preempted", preempt_message)
@@ -634,7 +740,6 @@ def start_task_execution() -> tuple[bool, str]:
         
         # 如果发生了抢占，等待一段时间让ROS2系统稳定
         if should_preempt:
-            import time
             log_task_operation(f"{new_queue_level}_queue", "preemption_delay", "waiting_for_system_stabilization")
             time.sleep(0.5)  # 等待500毫秒让系统稳定
         
@@ -814,14 +919,20 @@ def send_next_command() -> bool:
 def get_highest_priority_queue() -> tuple[Optional[str], List[Dict]]:
     """
     获取最高优先级的非空队列
+    L0队列只有在L1-L3队列都为空时才会被选中
     
     Returns:
         tuple[Optional[str], List[Dict]]: (队列级别, 队列中的任务列表)
     """
-    # 按优先级顺序检查队列
+    # 按优先级顺序检查队列（L0队列最后检查）
     for level in ["L3", "L2", "L1"]:
         if task_queues[level]:
             return level, list(task_queues[level])
+    
+    # 只有在L1-L3队列都为空时才检查L0队列
+    if task_queues["L0"]:
+        return "L0", list(task_queues["L0"])
+    
     return None, []
 
 # 移除 start_next_queue() 函数，因为不再需要自动启动下一个队列
@@ -858,7 +969,9 @@ def complete_current_task() -> None:
             "total_count": 0,
             "waiting_for_next": False,
             "command_sent": False,
-            "started": False
+            "started": False,
+            "arrived_task": None,
+            "arrived_time": None
         })
         
         log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"total_{current_execution['total_count']}")
@@ -909,7 +1022,9 @@ def remove_task_from_queue(task_id: str) -> tuple[bool, str]:
                                 "total_count": 0,
                                 "waiting_for_next": False,
                                 "command_sent": False,
-                                "started": False
+                                "started": False,
+                                "arrived_task": None,
+                                "arrived_time": None
                             })
                             # 不再自动启动下一个队列，需要手动调用start接口
                     else:
@@ -955,11 +1070,43 @@ def send_next_to_robot() -> tuple[bool, str]:
     Returns:
         tuple[bool, str]: (是否成功, 消息)
     """
+    # 检查是否有任务正在等待取件
+    if current_execution["arrived_task"] is not None:
+        # 检查是否超时
+        if current_execution["arrived_time"] is not None:
+            elapsed_time = time.time() - current_execution["arrived_time"]
+            if elapsed_time < current_execution["pickup_timeout"]:
+                return False, f"Cannot send next command: current task is waiting for pickup ({int(current_execution['pickup_timeout'] - elapsed_time)}s remaining)"
+            else:
+                # 超时，需要降级当前到达的任务
+                _handle_pickup_timeout()
+    
     if not current_execution["active"]:
         return False, "No active task queue"
-    
+
     if not current_execution["waiting_for_next"]:
         return False, "Robot is not waiting for next command"
+    
+    # 检查是否还有更多任务需要执行
+    if current_execution["completed_count"] >= current_execution["total_count"]:
+        # 所有任务都已经到达完毕，结束当前执行
+        queue_level = current_execution["current_queue_level"]
+        current_execution.update({
+            "active": False,
+            "current_queue_level": None,
+            "queue_tasks": [],
+            "completed_count": 0,
+            "total_count": 0,
+            "waiting_for_next": False,
+            "command_sent": False,
+            "started": False,
+            "arrived_task": None,
+            "arrived_time": None
+        })
+        
+        from services.log_service import log_task_operation
+        log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"all_{current_execution.get('total_count', 0)}_tasks_processed")
+        return True, f"{queue_level} queue completed - all tasks have been processed"
     
     # 检查ROS2桥接服务
     bridge_available, bridge_status = check_ros2_bridge_connection()
@@ -992,20 +1139,31 @@ def handle_robot_arrival() -> tuple[bool, str]:
     queue_level = current_execution["current_queue_level"]
     current_task_index = current_execution["completed_count"]
     
-    # 检查是否完成了当前队列的所有任务
+    # 检查是否所有任务都已经处理完毕
     if current_task_index >= current_execution["total_count"]:
-        # 当前队列所有任务完成
-        complete_current_task()
-        return True, f"{queue_level} queue completed successfully"
+        # 所有任务都已经到达过，这种情况不应该发生
+        return False, f"All tasks in {queue_level} queue have already been processed"
+    
+    # 获取当前任务并设置为到达状态
+    current_task = current_execution["queue_tasks"][current_task_index]
+    current_execution["arrived_task"] = current_task
+    current_execution["arrived_time"] = time.time()
+    current_execution["waiting_for_next"] = True
+    
+    # 更新任务状态为arrived
+    update_task_status(current_task["task_id"], "arrived")
+    
+    # 完成当前任务计数（表示已到达）
+    current_execution["completed_count"] += 1
+    
+    log_task_operation(current_task["task_id"], "arrived_at_target", f"waiting_for_pickup")
+    log_task_operation(f"{queue_level}_queue", "arrived_at_target", f"task_{current_task_index + 1}")
+    
+    # 检查是否是最后一个任务
+    if current_execution["completed_count"] >= current_execution["total_count"]:
+        return True, f"Robot arrived at final target {current_task_index + 1}/{current_execution['total_count']}, task {current_task['task_id']} is waiting for pickup (last task in queue)"
     else:
-        # 还有更多任务，等待next指令
-        current_execution["waiting_for_next"] = True
-        
-        # 完成当前任务
-        complete_current_task()
-        
-        log_task_operation(f"{queue_level}_queue", "arrived_at_target", f"task_{current_task_index + 1}")
-        return True, f"Robot arrived at target {current_task_index + 1}/{current_execution['total_count']}, waiting for next command"
+        return True, f"Robot arrived at target {current_task_index + 1}/{current_execution['total_count']}, task {current_task['task_id']} is waiting for pickup"
 
 def get_queue_status() -> Dict:
     """
@@ -1087,12 +1245,30 @@ def get_queue_status() -> Dict:
                     task_detail["execution_order"] = i + 1
                     execution_queue_tasks.append(task_detail)
         
+        # 构建到达任务信息
+        arrived_task_info = None
+        if current_execution["arrived_task"] is not None:
+            arrived_task = current_execution["arrived_task"]
+            elapsed_time = time.time() - (current_execution["arrived_time"] or 0)
+            remaining_time = max(0, current_execution["pickup_timeout"] - elapsed_time)
+            
+            arrived_task_info = {
+                "task_id": arrived_task.get("task_id", ""),
+                "location_id": arrived_task.get("location_id", ""),
+                "receiver": arrived_task.get("receiver", ""),
+                "arrived_at": current_execution["arrived_time"],
+                "waiting_time": int(elapsed_time),
+                "timeout_remaining": int(remaining_time),
+                "status": "arrived"
+            }
+        
         status = {
             "queues": {
                 level: len(queue) for level, queue in task_queues.items()
             },
             "queue_details": queue_details,
             "current_executing_task": current_executing_task,
+            "arrived_task": arrived_task_info,
             "execution_queue": {
                 "all_tasks": execution_queue_tasks,
                 "completed_in_queue": execution_completed_tasks,
@@ -1126,4 +1302,177 @@ def get_queue_status() -> Dict:
                 "total_tasks": sum(len(queue) for queue in task_queues.values()) + len(execution_queue_tasks) + len(completed_tasks)
             }
         }
+        
+        # 更新队列状态，包含降级策略信息
+        status["downgrade_strategy"] = get_current_downgrade_strategy()
+        
         return status
+
+def _handle_pickup_timeout():
+    """
+    处理取件超时，将任务降级到下一优先级队列
+    使用配置的降级策略进行降级
+    """
+    from services.log_service import log_task_operation
+    
+    if current_execution["arrived_task"] is None:
+        return
+    
+    arrived_task = current_execution["arrived_task"]
+    original_level = arrived_task.get("security_level", "")
+    
+    # 使用配置的降级策略确定降级目标队列
+    downgrade_target = get_downgrade_target(original_level)
+    
+    if downgrade_target and downgrade_target != original_level:
+        # 更新任务的安全等级为降级后的等级
+        arrived_task["security_level"] = downgrade_target
+        
+        # 重置任务状态为pending
+        update_task_status(arrived_task["task_id"], "pending")
+        
+        # 将任务加入降级队列
+        task_queues[downgrade_target].append(arrived_task)
+        
+        log_task_operation(arrived_task["task_id"], "pickup_timeout", 
+                         f"downgrade_from_{original_level}_to_{downgrade_target}_strategy_{CURRENT_DOWNGRADE_STRATEGY}")
+    elif downgrade_target == original_level:
+        # L0级任务在ALL_STEP_DOWN策略下保持原级别，重新加入队列
+        update_task_status(arrived_task["task_id"], "pending")
+        task_queues[original_level].append(arrived_task)
+        
+        log_task_operation(arrived_task["task_id"], "pickup_timeout", 
+                         f"{original_level}_timeout_readded_to_same_level_strategy_{CURRENT_DOWNGRADE_STRATEGY}")
+    else:
+        # 无法降级，记录日志
+        log_task_operation(arrived_task["task_id"], "pickup_timeout", 
+                         f"{original_level}_no_downgrade_available_strategy_{CURRENT_DOWNGRADE_STRATEGY}")
+    
+    # 清除到达状态
+    current_execution["arrived_task"] = None
+    current_execution["arrived_time"] = None
+    
+    # 检查是否是最后一个任务，如果是则结束当前执行
+    if (current_execution["active"] and 
+        current_execution["completed_count"] >= current_execution["total_count"]):
+        # 最后一个任务已超时处理完成，结束当前执行
+        queue_level = current_execution["current_queue_level"]
+        current_execution.update({
+            "active": False,
+            "current_queue_level": None,
+            "queue_tasks": [],
+            "completed_count": 0,
+            "total_count": 0,
+            "waiting_for_next": False,
+            "command_sent": False,
+            "started": False,
+            "arrived_task": None,
+            "arrived_time": None
+        })
+        
+        log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"final_task_timeout_processed")
+
+def clear_arrived_task(task_id: str) -> tuple[bool, str]:
+    """
+    清除到达状态（用户完成取件时调用）
+    
+    Args:
+        task_id: 任务ID
+        
+    Returns:
+        tuple[bool, str]: (是否成功, 消息)
+    """
+    from services.log_service import log_task_operation
+    
+    if (current_execution["arrived_task"] is not None and 
+        current_execution["arrived_task"]["task_id"] == task_id):
+        
+        # 清除到达状态
+        current_execution["arrived_task"] = None
+        current_execution["arrived_time"] = None
+        
+        # 检查是否是最后一个任务
+        if (current_execution["active"] and 
+            current_execution["completed_count"] >= current_execution["total_count"]):
+            # 最后一个任务已取件完成，结束当前执行
+            queue_level = current_execution["current_queue_level"]
+            current_execution.update({
+                "active": False,
+                "current_queue_level": None,
+                "queue_tasks": [],
+                "completed_count": 0,
+                "total_count": 0,
+                "waiting_for_next": False,
+                "command_sent": False,
+                "started": False,
+                "arrived_task": None,
+                "arrived_time": None
+            })
+            
+            log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"final_task_{task_id}_pickup_completed")
+            log_task_operation(task_id, "pickup_completed", "arrived_state_cleared_final_task")
+            return True, f"Arrived state cleared for final task {task_id}, {queue_level} queue completed"
+        else:
+            log_task_operation(task_id, "pickup_completed", "arrived_state_cleared")
+            return True, f"Arrived state cleared for task {task_id}"
+    
+    return False, f"Task {task_id} is not in arrived state"
+
+def handle_robot_optimized_order(original_order: List[str], optimized_order: List[str]) -> tuple[bool, str]:
+    """
+    处理机器人优化后的任务执行顺序
+    
+    Args:
+        original_order: 原始任务顺序（位置名称列表）
+        optimized_order: 优化后的任务顺序（位置名称列表）
+        
+    Returns:
+        tuple[bool, str]: (是否成功, 消息)
+    """
+    from services.log_service import log_task_operation
+    
+    try:
+        # 检查当前是否有活跃的执行队列
+        if not current_execution["active"]:
+            return False, "No active task queue to reorder"
+        
+        # 验证优化后的顺序包含所有原始任务
+        if set(original_order) != set(optimized_order):
+            return False, "Optimized order does not match original tasks"
+        
+        current_queue_level = current_execution["current_queue_level"]
+        current_queue_tasks = current_execution["queue_tasks"]
+        
+        # 创建位置名称到任务的映射
+        location_to_task = {}
+        for task in current_queue_tasks:
+            location = get_location_by_id(task["location_id"])
+            if location:
+                location_name = location["label"]
+                location_to_task[location_name] = task
+        
+        # 根据优化后的顺序重新排列任务
+        reordered_tasks = []
+        for location_name in optimized_order:
+            if location_name in location_to_task:
+                reordered_tasks.append(location_to_task[location_name])
+            else:
+                log_task_operation(f"{current_queue_level}_queue", "reorder_warning", f"location_{location_name}_not_found")
+        
+        if len(reordered_tasks) != len(current_queue_tasks):
+            return False, f"Task count mismatch: original {len(current_queue_tasks)}, reordered {len(reordered_tasks)}"
+        
+        # 更新执行队列中的任务顺序
+        current_execution["queue_tasks"] = reordered_tasks
+        
+        # 记录重新排序操作
+        original_task_ids = [task["task_id"] for task in current_queue_tasks]
+        reordered_task_ids = [task["task_id"] for task in reordered_tasks]
+        
+        log_task_operation(f"{current_queue_level}_queue", "tasks_reordered", 
+                         f"original_order: {original_task_ids}, optimized_order: {reordered_task_ids}")
+        
+        return True, f"Successfully reordered {len(reordered_tasks)} tasks in {current_queue_level} queue based on TSP optimization"
+        
+    except Exception as e:
+        return False, f"Error reordering tasks: {str(e)}"

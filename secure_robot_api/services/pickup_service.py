@@ -3,7 +3,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from services.auth_service import is_pickup_auth_valid, get_pickup_auth_status, LEVEL_ORDER
-from services.task_service import load_tasks, save_tasks, load_lockers, save_lockers, get_task_by_id
+from services.task_service import load_tasks, save_tasks, load_lockers, save_lockers, get_task_by_id, clear_arrived_task
 from services.log_service import create_log
 
 def get_user_pickup_tasks(user_id: str) -> List[Dict]:
@@ -22,13 +22,21 @@ def get_user_pickup_tasks(user_id: str) -> List[Dict]:
     for task in tasks:
         if (task.get('receiver') == user_id and 
             task.get('status') == 'arrived'):
+            # 返回完整的任务信息
             pickup_tasks.append({
                 'task_id': task.get('task_id'),
                 'description': task.get('description', ''),
                 'security_level': task.get('security_level'),
                 'locker_id': task.get('locker_id'),
                 'initiator': task.get('initiator'),
-                'timestamps': task.get('timestamps', {})
+                'receiver': task.get('receiver'),
+                'location_id': task.get('location_id'),
+                'status': task.get('status'),
+                'timestamps': task.get('timestamps', {}),
+                'created_at': task.get('timestamps', {}).get('created', ''),
+                # 添加其他可能有用的字段
+                'location_label': task.get('location_label', ''),
+                'priority': task.get('priority', 0)
             })
     
     return pickup_tasks
@@ -117,6 +125,17 @@ def execute_pickup(user_id: str, task_id: str) -> Tuple[bool, str, str]:
         success = update_task_status_to_completed(task_id)
         if not success:
             return False, "PICKUP_003", f"更新任务 '{task_id}' 状态失败"
+        
+        # 清除到达状态（允许继续执行下一个任务）
+        clear_success, clear_msg = clear_arrived_task(task_id)
+        if clear_success:
+            create_log(
+                log_type="info",
+                message=f"任务 {task_id} 到达状态已清除: {clear_msg}",
+                related_user=user_id,
+                related_task=task_id,
+                result="success"
+            )
         
         # 释放柜子
         locker_id = task.get('locker_id')
