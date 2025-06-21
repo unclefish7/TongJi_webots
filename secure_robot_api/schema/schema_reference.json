@@ -46,6 +46,12 @@
 			"format": "T{yyyyMMddHHmmss}{random}",
 			"description": "任务唯一编号"
 		},
+		"task_type": {
+			"type": "enum",
+			"values": ["call", "send"],
+			"required": true,
+			"description": "任务类型：call-呼叫任务（不需要柜子），send-寄送任务（需要柜子）"
+		},
 		"description": {
 			"type": "string",
 			"required": false,
@@ -71,9 +77,9 @@
 		},
 		"locker_id": {
 			"type": "string",
-			"required": true,
+			"required": false,
 			"ref": "Locker.locker_id",
-			"description": "分配的柜子ID"
+			"description": "分配的柜子ID（仅send任务需要）"
 		},
 		"security_level": {
 			"type": "enum",

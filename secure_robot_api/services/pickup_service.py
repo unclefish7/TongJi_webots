@@ -8,7 +8,7 @@ from services.log_service import create_log
 
 def get_user_pickup_tasks(user_id: str) -> List[Dict]:
     """
-    获取用户可取件的任务列表
+    获取用户可取件的任务列表（仅包含send任务）
     
     Args:
         user_id: 用户ID
@@ -21,10 +21,12 @@ def get_user_pickup_tasks(user_id: str) -> List[Dict]:
     
     for task in tasks:
         if (task.get('receiver') == user_id and 
-            task.get('status') == 'arrived'):
+            task.get('status') == 'arrived' and
+            task.get('task_type', 'send') == 'send'):  # 只返回send任务
             # 返回完整的任务信息
             pickup_tasks.append({
                 'task_id': task.get('task_id'),
+                'task_type': task.get('task_type', 'send'),
                 'description': task.get('description', ''),
                 'security_level': task.get('security_level'),
                 'locker_id': task.get('locker_id'),
@@ -43,7 +45,7 @@ def get_user_pickup_tasks(user_id: str) -> List[Dict]:
 
 def validate_pickup_request(user_id: str, task_id: str) -> Tuple[bool, str, Optional[Dict]]:
     """
-    验证取件请求
+    验证取件请求（仅适用于send任务）
     
     Args:
         user_id: 用户ID
@@ -56,6 +58,11 @@ def validate_pickup_request(user_id: str, task_id: str) -> Tuple[bool, str, Opti
     task = get_task_by_id(task_id)
     if not task:
         return False, f"任务 '{task_id}' 不存在", None
+    
+    # 验证任务类型（只有send任务才能取件）
+    task_type = task.get('task_type', 'send')
+    if task_type != 'send':
+        return False, f"任务 '{task_id}' 是 {task_type} 任务，不需要取件操作", None
     
     # 验证接收人
     if task.get('receiver') != user_id:

@@ -22,6 +22,7 @@ class TaskCreateRequest(BaseModel):
     receiver: str  # 接收人ID
     location_id: str  # 目标位置ID
     security_level: str  # 任务安全等级 L1/L2/L3
+    task_type: Literal["call", "send"]  # 任务类型：call-呼叫任务，send-寄送任务
     description: Optional[str] = None  # 任务描述
 
 class TaskCreateResponse(BaseModel):
@@ -48,11 +49,12 @@ class TaskQueryResponse(BaseModel):
 
 class Task(BaseModel):
     task_id: str
+    task_type: str  # 任务类型：call/send
     description: Optional[str]
     initiator: str
     receiver: str
     location_id: str
-    locker_id: str  # 添加柜子ID字段
+    locker_id: Optional[str] = None  # 柜子ID字段改为可选（仅send任务需要）
     security_level: str
     status: str
     timestamps: Dict[str, Optional[str]]
@@ -105,3 +107,6 @@ class PickupExecuteResponse(BaseModel):
     code: str
     message: str
     task_id: Optional[str] = None
+    locker_id: Optional[str] = None  # 分配的柜子ID
+    pickup_time: Optional[str] = None  # 取件时间
+    auth_status: Optional[Dict] = None  # 认证状态

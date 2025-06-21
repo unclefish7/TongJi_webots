@@ -32,6 +32,7 @@ async def create_task_endpoint(request: TaskCreateRequest):
     - **receiver**: 接收人ID  
     - **location_id**: 目标位置ID
     - **security_level**: 任务安全等级 (L1/L2/L3)
+    - **task_type**: 任务类型 (call-呼叫任务/send-寄送任务)
     - **description**: 任务描述（可选）
     
     返回编码说明：
@@ -39,8 +40,8 @@ async def create_task_endpoint(request: TaskCreateRequest):
     - TASK_001: 发起人不存在
     - TASK_002: 接收人不存在
     - TASK_003: 目标位置不存在
-    - TASK_006: 无可用柜子
-    - TASK_007: 柜子分配失败
+    - TASK_006: 无可用柜子（仅send任务）
+    - TASK_007: 柜子分配失败（仅send任务）
     - TASK_008: 数据验证失败
     - TASK_009: 保存失败
     """
@@ -50,6 +51,7 @@ async def create_task_endpoint(request: TaskCreateRequest):
             receiver=request.receiver,
             location_id=request.location_id,
             security_level=request.security_level,
+            task_type=request.task_type,
             description=request.description
         )
         
@@ -469,5 +471,41 @@ async def set_downgrade_strategy_endpoint(request: Dict[str, str]):
             detail={
                 "code": "TASK_999",
                 "message": f"Error setting downgrade strategy: {str(e)}"
+            }
+        )
+
+@router.post("/pickup/complete/{task_id}")
+async def complete_pickup(task_id: str):
+    """
+    完成取件操作（清除到达状态，仅适用于send任务）
+    
+    - **task_id**: 要完成取件的任务ID
+    """
+    try:
+        success, message = clear_arrived_task(task_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TASK_014",
+                    "message": message
+                }
+            )
+        
+        return {
+            "success": True,
+            "code": "TASK_000",
+            "message": message
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "TASK_999",
+                "message": f"Unexpected error: {str(e)}"
             }
         )

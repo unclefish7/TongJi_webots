@@ -162,7 +162,7 @@ class TaskErrorCodes:
     STATUS_UPDATE_FAILED = "TASK_011"
     LOCKER_RELEASE_FAILED = "TASK_012"
 
-def validate_task_creation(user_id: str, receiver: str, location_id: str, security_level: str) -> tuple[bool, str, str]:
+def validate_task_creation(user_id: str, receiver: str, location_id: str, security_level: str, task_type: str) -> tuple[bool, str, str]:
     """
     验证任务创建的前置条件
     
@@ -171,6 +171,7 @@ def validate_task_creation(user_id: str, receiver: str, location_id: str, securi
         receiver: 接收人ID
         location_id: 目标位置ID
         security_level: 安全等级
+        task_type: 任务类型 (call/send)
     
     Returns:
         tuple[bool, str, str]: (是否验证通过, 错误编码, 错误信息)
@@ -190,11 +191,15 @@ def validate_task_creation(user_id: str, receiver: str, location_id: str, securi
     if not location:
         return False, TaskErrorCodes.LOCATION_NOT_FOUND, f"Target location '{location_id}' not found"
     
+    # 验证任务类型
+    if task_type not in ["call", "send"]:
+        return False, TaskErrorCodes.VALIDATION_FAILED, f"Invalid task type '{task_type}'. Must be 'call' or 'send'"
+    
     # 移除安全等级验证，现在接受任何security_level值
     
     return True, TaskErrorCodes.SUCCESS, ""
 
-def create_task(user_id: str, receiver: str, location_id: str, security_level: str, description: Optional[str] = None) -> tuple[bool, str, str, Optional[str], Optional[Dict], Optional[str]]:
+def create_task(user_id: str, receiver: str, location_id: str, security_level: str, task_type: str, description: Optional[str] = None) -> tuple[bool, str, str, Optional[str], Optional[Dict], Optional[str]]:
     """
     创建新任务并添加到队列
     
@@ -203,6 +208,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         receiver: 接收人ID
         location_id: 目标位置ID
         security_level: 安全等级
+        task_type: 任务类型 (call/send)
         description: 任务描述
     
     Returns:
@@ -212,31 +218,33 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
     from services.log_service import log_task_creation, log_error
     
     # 验证任务创建条件
-    is_valid, error_code, error_msg = validate_task_creation(user_id, receiver, location_id, security_level)
+    is_valid, error_code, error_msg = validate_task_creation(user_id, receiver, location_id, security_level, task_type)
     if not is_valid:
         log_task_creation("", user_id, receiver, location_id, security_level, "", False, error_code)
         return False, error_code, error_msg, None, None, None
     
-    # 简化操作：只需要柜子分配
+    # 根据任务类型决定是否需要柜子分配
     locker_allocated = False
     locker_id = None
     
     try:
-        # 步骤1：查找并分配可用柜子
-        available_locker = get_available_locker()
-        if not available_locker:
-            log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.NO_AVAILABLE_LOCKERS)
-            return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for task creation. Please try again later.", None, None, None
-        
-        locker_id = available_locker.get('locker_id')
-        
-        # 分配柜子
-        allocation_success, allocation_error = allocate_locker(locker_id)
-        if not allocation_success:
-            log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED)
-            return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
-        
-        locker_allocated = True
+        # 步骤1：仅对send任务分配柜子
+        if task_type == "send":
+            # 查找并分配可用柜子
+            available_locker = get_available_locker()
+            if not available_locker:
+                log_task_creation("", user_id, receiver, location_id, security_level, "", False, TaskErrorCodes.NO_AVAILABLE_LOCKERS)
+                return False, TaskErrorCodes.NO_AVAILABLE_LOCKERS, "No available lockers for send task creation. Please try again later.", None, None, None
+            
+            locker_id = available_locker.get('locker_id')
+            
+            # 分配柜子
+            allocation_success, allocation_error = allocate_locker(locker_id)
+            if not allocation_success:
+                log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED)
+                return False, TaskErrorCodes.LOCKER_ALLOCATION_FAILED, f"Failed to allocate locker {locker_id}: {allocation_error}", None, None, None
+            
+            locker_allocated = True
         
         # 步骤2：基于schema构建任务数据
         provided_values = {
@@ -245,7 +253,8 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
             "receiver": receiver,
             "location_id": location_id,
             "security_level": security_level,
-            "locker_id": locker_id
+            "task_type": task_type,
+            "locker_id": locker_id  # call任务时为None
         }
         
         task_data = create_entity_from_schema("Task", provided_values)
@@ -253,8 +262,9 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         # 验证生成的任务数据
         is_valid, validation_error = validate_entity_against_schema("Task", task_data)
         if not is_valid:
-            # 如果验证失败，只需要回滚柜子分配
-            release_locker(locker_id)
+            # 如果验证失败，回滚柜子分配（仅send任务）
+            if locker_allocated and locker_id:
+                release_locker(locker_id)
             log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.VALIDATION_FAILED)
             return False, TaskErrorCodes.VALIDATION_FAILED, f"Task data validation failed: {validation_error}", None, None, None
         
@@ -262,8 +272,9 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         try:
             save_task_to_storage(task_data)
         except Exception as save_error:
-            # 如果保存失败，只需要回滚柜子分配
-            release_locker(locker_id)
+            # 如果保存失败，回滚柜子分配（仅send任务）
+            if locker_allocated and locker_id:
+                release_locker(locker_id)
             log_task_creation("", user_id, receiver, location_id, security_level, locker_id, False, TaskErrorCodes.SAVE_FAILED)
             return False, TaskErrorCodes.SAVE_FAILED, f"Failed to save task: {str(save_error)}", None, None, None
         
@@ -277,7 +288,9 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         receiver_user = get_user_by_id(receiver)
         location = get_location_by_id(location_id)
         
-        success_message = f"Task {task_id} created successfully. Initiator: {initiator.get('name')} ({user_id}), Receiver: {receiver_user.get('name')} ({receiver}), Location: {location.get('label')} ({location_id}), Security Level: {security_level}, Assigned Locker: {locker_id}"
+        # 构建成功消息
+        locker_info = f", Assigned Locker: {locker_id}" if locker_id else ""
+        success_message = f"Task {task_id} ({task_type}) created successfully. Initiator: {initiator.get('name')} ({user_id}), Receiver: {receiver_user.get('name')} ({receiver}), Location: {location.get('label')} ({location_id}), Security Level: {security_level}{locker_info}"
         
         # 在成功创建任务后，添加到队列
         add_task_to_queue(task_data)
@@ -285,7 +298,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
         return True, TaskErrorCodes.SUCCESS, success_message, task_id, task_data, locker_id
         
     except Exception as e:
-        # 如果发生任何未预期的异常，只需要回滚柜子分配
+        # 如果发生任何未预期的异常，回滚柜子分配（仅send任务）
         if locker_allocated and locker_id:
             release_locker(locker_id)
         log_error(f"Unexpected error during task creation: {str(e)}", user_id)
@@ -392,7 +405,7 @@ def get_tasks_by_user(user_id: str, role: str = "all") -> List[Dict]:
 
 def complete_task(task_id: str) -> tuple[bool, str, str, Optional[Dict]]:
     """
-    完成任务并释放柜子
+    完成任务并释放柜子（仅send任务）
     
     Args:
         task_id: 任务ID
@@ -412,10 +425,12 @@ def complete_task(task_id: str) -> tuple[bool, str, str, Optional[Dict]]:
     if not status_updated:
         return False, TaskErrorCodes.STATUS_UPDATE_FAILED, f"Failed to update task status: {status_message}", None
     
-    # 释放柜子
-    locker_id = task.get('locker_id')
+    # 仅对send任务释放柜子
     warning_message = ""
-    if locker_id:
+    task_type = task.get('task_type', 'send')  # 默认为send以保持向后兼容
+    locker_id = task.get('locker_id')
+    
+    if task_type == "send" and locker_id:
         locker_released, locker_message = release_locker(locker_id)
         if locker_released:
             log_locker_operation(locker_id, "released", task_id, True)
@@ -426,12 +441,12 @@ def complete_task(task_id: str) -> tuple[bool, str, str, Optional[Dict]]:
     # 获取更新后的任务信息
     updated_task = get_task_by_id(task_id)
     
-    success_message = f"Task {task_id} completed successfully{warning_message}"
+    success_message = f"Task {task_id} ({task_type}) completed successfully{warning_message}"
     return True, TaskErrorCodes.SUCCESS, success_message, updated_task
 
 def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[Dict]]:
     """
-    标记任务失败并释放柜子
+    标记任务失败并释放柜子（仅send任务）
     
     Args:
         task_id: 任务ID
@@ -452,10 +467,12 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
     if not status_updated:
         return False, TaskErrorCodes.STATUS_UPDATE_FAILED, f"Failed to update task status: {status_message}", None
     
-    # 释放柜子
-    locker_id = task.get('locker_id')
+    # 仅对send任务释放柜子
     warning_message = ""
-    if locker_id:
+    task_type = task.get('task_type', 'send')  # 默认为send以保持向后兼容
+    locker_id = task.get('locker_id')
+    
+    if task_type == "send" and locker_id:
         locker_released, locker_message = release_locker(locker_id)
         if locker_released:
             log_locker_operation(locker_id, "released", task_id, True)
@@ -466,7 +483,7 @@ def fail_task(task_id: str, reason: str = "") -> tuple[bool, str, str, Optional[
     # 获取更新后的任务信息
     updated_task = get_task_by_id(task_id)
     
-    failure_message = f"Task {task_id} marked as failed{warning_message}"
+    failure_message = f"Task {task_id} ({task_type}) marked as failed{warning_message}"
     if reason:
         failure_message += f". Reason: {reason}"
         # 记录失败原因日志
@@ -1127,6 +1144,8 @@ def send_next_to_robot() -> tuple[bool, str]:
 def handle_robot_arrival() -> tuple[bool, str]:
     """
     处理机器人到达通知
+    - send任务：设置为arrived状态，等待取件
+    - call任务：直接完成任务
     
     Returns:
         tuple[bool, str]: (是否成功, 消息)
@@ -1144,26 +1163,59 @@ def handle_robot_arrival() -> tuple[bool, str]:
         # 所有任务都已经到达过，这种情况不应该发生
         return False, f"All tasks in {queue_level} queue have already been processed"
     
-    # 获取当前任务并设置为到达状态
+    # 获取当前任务
     current_task = current_execution["queue_tasks"][current_task_index]
-    current_execution["arrived_task"] = current_task
-    current_execution["arrived_time"] = time.time()
-    current_execution["waiting_for_next"] = True
-    
-    # 更新任务状态为arrived
-    update_task_status(current_task["task_id"], "arrived")
+    task_type = current_task.get("task_type", "send")  # 默认为send以保持向后兼容
     
     # 完成当前任务计数（表示已到达）
     current_execution["completed_count"] += 1
     
-    log_task_operation(current_task["task_id"], "arrived_at_target", f"waiting_for_pickup")
-    log_task_operation(f"{queue_level}_queue", "arrived_at_target", f"task_{current_task_index + 1}")
-    
-    # 检查是否是最后一个任务
-    if current_execution["completed_count"] >= current_execution["total_count"]:
-        return True, f"Robot arrived at final target {current_task_index + 1}/{current_execution['total_count']}, task {current_task['task_id']} is waiting for pickup (last task in queue)"
+    if task_type == "call":
+        # call任务：直接完成，不需要等待取件
+        complete_task(current_task["task_id"])
+        log_task_operation(current_task["task_id"], "arrived_and_completed", f"call_task_auto_completed")
+        log_task_operation(f"{queue_level}_queue", "call_task_completed", f"task_{current_task_index + 1}")
+        
+        # 检查是否是最后一个任务
+        if current_execution["completed_count"] >= current_execution["total_count"]:
+            # 所有任务都已完成，结束当前执行
+            current_execution.update({
+                "active": False,
+                "current_queue_level": None,
+                "queue_tasks": [],
+                "completed_count": 0,
+                "total_count": 0,
+                "waiting_for_next": False,
+                "command_sent": False,
+                "started": False,
+                "arrived_task": None,
+                "arrived_time": None
+            })
+            
+            log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"final_call_task_{current_task['task_id']}_completed")
+            return True, f"Call task {current_task['task_id']} completed automatically, {queue_level} queue finished"
+        else:
+            # 还有更多任务，设置waiting_for_next状态
+            current_execution["waiting_for_next"] = True
+            return True, f"Call task {current_task['task_id']} completed automatically at target {current_task_index + 1}/{current_execution['total_count']}"
+            
     else:
-        return True, f"Robot arrived at target {current_task_index + 1}/{current_execution['total_count']}, task {current_task['task_id']} is waiting for pickup"
+        # send任务：设置为arrived状态，等待取件
+        current_execution["arrived_task"] = current_task
+        current_execution["arrived_time"] = time.time()
+        current_execution["waiting_for_next"] = True
+        
+        # 更新任务状态为arrived
+        update_task_status(current_task["task_id"], "arrived")
+        
+        log_task_operation(current_task["task_id"], "arrived_at_target", f"waiting_for_pickup")
+        log_task_operation(f"{queue_level}_queue", "arrived_at_target", f"task_{current_task_index + 1}")
+        
+        # 检查是否是最后一个任务
+        if current_execution["completed_count"] >= current_execution["total_count"]:
+            return True, f"Robot arrived at final target {current_task_index + 1}/{current_execution['total_count']}, send task {current_task['task_id']} is waiting for pickup (last task in queue)"
+        else:
+            return True, f"Robot arrived at target {current_task_index + 1}/{current_execution['total_count']}, send task {current_task['task_id']} is waiting for pickup"
 
 def get_queue_status() -> Dict:
     """
@@ -1187,6 +1239,7 @@ def get_queue_status() -> Dict:
             
             return {
                 "task_id": task.get("task_id", ""),
+                "task_type": task.get("task_type", "send"),  # 添加任务类型字段
                 "user_id": task.get("initiator", task.get("user_id", "")),
                 "receiver": task.get("receiver", ""),
                 "location_id": task.get("location_id", ""),
@@ -1195,7 +1248,7 @@ def get_queue_status() -> Dict:
                 "description": task.get("description", ""),
                 "status": status_override or task.get("status", ""),
                 "created_at": task.get("timestamps", {}).get("created", task.get("created_at", "")),
-                "locker_id": task.get("locker_id", "")
+                "locker_id": task.get("locker_id", "")  # call任务可能为空
             }
         
         for level in task_queues:
@@ -1374,7 +1427,7 @@ def _handle_pickup_timeout():
 
 def clear_arrived_task(task_id: str) -> tuple[bool, str]:
     """
-    清除到达状态（用户完成取件时调用）
+    清除到达状态（用户完成取件时调用，仅适用于send任务）
     
     Args:
         task_id: 任务ID
@@ -1386,6 +1439,11 @@ def clear_arrived_task(task_id: str) -> tuple[bool, str]:
     
     if (current_execution["arrived_task"] is not None and 
         current_execution["arrived_task"]["task_id"] == task_id):
+        
+        # 验证是否为send任务
+        task_type = current_execution["arrived_task"].get("task_type", "send")
+        if task_type != "send":
+            return False, f"Task {task_id} is a {task_type} task and does not require pickup"
         
         # 清除到达状态
         current_execution["arrived_task"] = None
@@ -1411,12 +1469,12 @@ def clear_arrived_task(task_id: str) -> tuple[bool, str]:
             
             log_task_operation(f"{queue_level}_queue", "completed_all_tasks", f"final_task_{task_id}_pickup_completed")
             log_task_operation(task_id, "pickup_completed", "arrived_state_cleared_final_task")
-            return True, f"Arrived state cleared for final task {task_id}, {queue_level} queue completed"
+            return True, f"Arrived state cleared for final send task {task_id}, {queue_level} queue completed"
         else:
             log_task_operation(task_id, "pickup_completed", "arrived_state_cleared")
-            return True, f"Arrived state cleared for task {task_id}"
+            return True, f"Arrived state cleared for send task {task_id}"
     
-    return False, f"Task {task_id} is not in arrived state"
+    return False, f"Send task {task_id} is not in arrived state"
 
 def handle_robot_optimized_order(original_order: List[str], optimized_order: List[str]) -> tuple[bool, str]:
     """
