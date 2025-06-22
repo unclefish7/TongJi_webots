@@ -455,7 +455,7 @@ expected_results:
   - HTTP状态码: 200
   - 返回JSON格式的任务列表 
   - 包含任务状态信息
-```
+
     expected_result: "位置选择成功"
     
   4. 
@@ -1308,6 +1308,8 @@ API网关         | ✓       | ✓       | ✓       | 95%
 ```
 
 #### 4.2.2 用例覆盖率追踪
+
+
 ```python
 # 用例覆盖率追踪工具
 class TestCoverageTracker:
@@ -1642,9 +1644,3 @@ class TestReportAggregator:
         return gates
 ```
 
----
-
-**本文档版本**: 1.0  
-**最后更新**: 2025年6月22日  
-**审核状态**: 待审核  
-**批准人**: 待定
