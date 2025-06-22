@@ -56,6 +56,14 @@ def save_lockers(lockers: List[Dict]) -> None:
     except Exception as e:
         raise Exception(f"Failed to save lockers: {str(e)}")
 
+def get_all_lockers_status() -> List[Dict]:
+    """获取所有柜子的状态信息"""
+    try:
+        lockers = load_lockers()
+        return lockers
+    except Exception as e:
+        raise Exception(f"Failed to get lockers status: {str(e)}")
+
 def get_location_by_id(location_id: str) -> Optional[Dict]:
     """根据位置ID获取位置信息"""
     locations = load_locations()
