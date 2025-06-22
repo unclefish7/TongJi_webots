@@ -5,7 +5,8 @@
         <el-icon><List /></el-icon>
         <span>任务队列</span>
         <div class="queue-stats" v-if="queueStatus">
-          <el-tag size="small" type="info">L1: {{ queueStatus.queues?.L1 || 0 }}</el-tag>
+          <el-tag size="small" type="info">L0: {{ queueStatus.queues?.L0 || 0 }}</el-tag>
+          <el-tag size="small" type="success">L1: {{ queueStatus.queues?.L1 || 0 }}</el-tag>
           <el-tag size="small" type="warning">L2: {{ queueStatus.queues?.L2 || 0 }}</el-tag>
           <el-tag size="small" type="danger">L3: {{ queueStatus.queues?.L3 || 0 }}</el-tag>
           <el-tag size="small" type="success" v-if="queueStatus.current_execution?.active">执行中</el-tag>
@@ -23,121 +24,205 @@
       </div>
     </template>
 
-    <div class="queue-container">
-      <!-- 队列控制按钮 -->
-      <div class="queue-controls" v-if="queueStatus">
-        <div class="control-buttons">
-          <el-button 
-            v-if="!queueStatus.current_execution?.active && getTotalQueueCount() > 0"
-            @click="startNextTask" 
-            type="primary" 
-            size="small"
-            :loading="isStarting"
-          >
-            <el-icon><Refresh /></el-icon>
-            启动下一个任务
-          </el-button>
-          
-          <el-button 
-            v-if="queueStatus.current_execution?.active"
-            @click="sendNextCommand" 
-            type="success" 
-            size="small"
-            :loading="isSendingNext"
-          >
-            <el-icon><Right /></el-icon>
-            继续下一个任务
-          </el-button>
-          
-          <el-button 
-            v-if="queueStatus.current_execution?.active"
-            @click="handleRobotArrival" 
-            type="warning" 
-            size="small"
-            :loading="isHandlingArrival"
-          >
-            <el-icon><Check /></el-icon>
-            机器人已到达
-          </el-button>
-        </div>
-      </div>
-
-      <div v-if="taskQueue.length === 0" class="empty-queue">
-        <el-empty description="队列为空，暂无任务" />
-      </div>
-      
-      <div v-else class="task-list">
-        <div
-          v-for="(task, index) in taskQueue"
-          :key="task.task_id"
-          class="task-item"
-          :class="{ 'task-active': task.status === 'executing' }"
+    <!-- 队列控制按钮 - 固定在顶部 -->
+    <div class="queue-controls">
+      <div class="control-buttons">
+        <el-button 
+          @click="startNextTask" 
+          type="primary" 
+          size="small"
+          :loading="isStarting"
+          :disabled="!canStartTask"
         >
-          <div class="task-header">
-            <div class="task-index">#{{ index + 1 }}</div>
+          <el-icon><VideoPlay /></el-icon>
+          开始执行任务队列
+        </el-button>
+        
+        <el-button 
+          @click="sendNextCommand" 
+          type="success" 
+          size="small"
+          :loading="isSendingNext"
+          :disabled="!canContinueTask"
+        >
+          <el-icon><Right /></el-icon>
+          继续下一任务
+        </el-button>
+      </div>
+    </div>
+
+    <div class="queue-container">
+      <!-- 可滚动内容区域 -->
+      <div class="scrollable-content">
+        <!-- 执行状态信息 -->
+        <div class="execution-status" v-if="queueStatus?.current_execution">
+          <div class="status-header">
+            <h4>执行状态</h4>
             <el-tag 
-              :type="getTaskTypeColor(task.security_level)" 
+              :type="queueStatus.current_execution.active ? 'success' : 'info'" 
               size="small"
             >
-              {{ getTaskTypeName(task.security_level) }}
-            </el-tag>
-            <el-tag 
-              :type="getStatusTypeColor(task.status)" 
-              size="small"
-              class="task-status"
-            >
-              {{ getStatusName(task.status) }}
+              {{ queueStatus.current_execution.active ? '执行中' : '空闲' }}
             </el-tag>
           </div>
           
-          <div class="task-content">
-            <div class="task-location">
-              <el-icon><Location /></el-icon>
-              目标: {{ task.location_id }}
+          <div v-if="queueStatus.current_execution.active" class="execution-details">
+            <div class="execution-info">
+              <span>当前队列: {{ queueStatus.current_execution.current_queue_level }}</span>
+              <span>进度: {{ queueStatus.current_execution.progress }}</span>
+              <span>剩余任务: {{ queueStatus.current_execution.remaining_tasks }}</span>
             </div>
-            <div class="task-user">
-              <el-icon><User /></el-icon>
-              发起人: {{ task.user_id }}
+            
+            <!-- 当前执行任务 - 移除进度条 -->
+            <div v-if="queueStatus.current_executing_task" class="current-task">
+              <h5>当前执行任务</h5>
+              <div class="task-card current-executing">
+                <div class="task-header">
+                  <el-tag :type="getTaskTypeColor(queueStatus.current_executing_task.security_level)" size="small">
+                    {{ queueStatus.current_executing_task.security_level }}
+                  </el-tag>
+                  <el-tag type="warning" size="small">执行中</el-tag>
+                </div>
+                <div class="task-content">
+                  <div class="task-info">
+                    <span>任务ID: {{ queueStatus.current_executing_task.task_id }}</span>
+                    <span>目标: {{ getLocationDisplayName(queueStatus.current_executing_task.location_id) }}</span>
+                    <span>发起人: {{ getUserDisplayName(queueStatus.current_executing_task.user_id) }}</span>
+                    <span>接收人: {{ getUserDisplayName(queueStatus.current_executing_task.receiver) }}</span>
+                    <span>描述: {{ queueStatus.current_executing_task.description || '无' }}</span>
+                    <span v-if="queueStatus.current_executing_task.progress">
+                      执行进度: {{ queueStatus.current_executing_task.progress }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="task-user">
-              <el-icon><User /></el-icon>
-              接收人: {{ task.receiver }}
-            </div>
-            <div class="task-description">
-              {{ task.description || '无描述' }}
-            </div>
-            <div class="task-time">
-              <el-icon><Clock /></el-icon>
-              创建时间: {{ formatTime(task.created_at) }}
-            </div>
-          </div>
 
-          <div class="task-actions" v-if="task.status === 'pending' && index === 0">
-            <el-button 
-              @click="startTask(task)" 
-              size="small" 
-              type="primary"
-            >
-              启动任务
-            </el-button>
-            <el-button 
-              @click="cancelTask(task)" 
-              size="small" 
-              type="danger"
-            >
-              取消任务
-            </el-button>
-          </div>
-
-          <div class="task-progress" v-if="task.status === 'executing'">
-            <el-progress 
-              :percentage="getTaskProgress(task)" 
-              :status="getProgressStatus(task)"
-            />
-            <div class="progress-text">
-              {{ getProgressText(task) }}
+            <!-- 到达任务信息 -->
+            <div v-if="queueStatus.arrived_task" class="arrived-task">
+              <h5>等待取件任务</h5>
+              <div class="task-card arrived">
+                <div class="task-header">
+                  <el-tag type="success" size="small">已到达</el-tag>
+                  <el-tag type="warning" size="small">
+                    剩余时间: {{ queueStatus.arrived_task.timeout_remaining }}秒
+                  </el-tag>
+                </div>
+                <div class="task-content">
+                  <div class="task-info">
+                    <span>任务ID: {{ queueStatus.arrived_task.task_id }}</span>
+                    <span>位置: {{ getLocationDisplayName(queueStatus.arrived_task.location_id) }}</span>
+                    <span>接收人: {{ getUserDisplayName(queueStatus.arrived_task.receiver) }}</span>
+                    <span>等待时间: {{ queueStatus.arrived_task.waiting_time }}秒</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
+
+        <!-- 执行队列详情 -->
+        <div class="execution-queue" v-if="queueStatus?.execution_queue?.all_tasks?.length > 0">
+          <h4>执行队列详情</h4>
+          <div class="execution-summary">
+            <span>总任务数: {{ queueStatus.execution_queue.total_in_queue }}</span>
+            <span>已完成: {{ queueStatus.execution_queue.completed_count }}</span>
+            <span>剩余: {{ queueStatus.execution_queue.remaining_count }}</span>
+          </div>
+          
+          <div class="execution-task-list">
+            <div
+              v-for="task in queueStatus.execution_queue.all_tasks"
+              :key="task.task_id"
+              class="task-item execution-task"
+              :class="{ 
+                'task-completed': task.status === 'completed_in_queue',
+                'task-executing': task.status === 'executing',
+                'task-waiting': task.status === 'waiting_in_queue'
+              }"
+            >
+              <div class="task-header">
+                <div class="task-order">{{ task.execution_order }}</div>
+                <el-tag 
+                  :type="getExecutionStatusColor(task.status)" 
+                  size="small"
+                >
+                  {{ getExecutionStatusName(task.status) }}
+                </el-tag>
+              </div>
+              
+              <div class="task-content">
+                <div class="task-info">
+                  <span>{{ getLocationDisplayName(task.location_id) }}</span>
+                  <span>{{ getUserDisplayName(task.receiver) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 等待队列详情 -->
+        <div class="queue-details" v-if="queueStatus?.queue_details">
+          <div class="queue-level" v-for="(level, levelName) in queueStatus.queue_details" :key="levelName">
+            <div class="level-header" v-if="level.length > 0">
+              <h4>{{ levelName }} 队列 ({{ level.length }}个任务)</h4>
+              <el-tag :type="getQueueLevelColor(levelName as string)" size="small">
+                {{ getQueueLevelName(levelName as string) }}
+              </el-tag>
+            </div>
+            
+            <div class="task-list">
+              <div
+                v-for="(task, index) in level"
+                :key="task.task_id"
+                class="task-item"
+              >
+                <div class="task-header">
+                  <div class="task-index">#{{ index + 1 }}</div>
+                  <el-tag 
+                    :type="getTaskTypeColor(task.security_level)" 
+                    size="small"
+                  >
+                    {{ task.security_level }}
+                  </el-tag>
+                  <el-tag 
+                    :type="getStatusTypeColor(task.status)" 
+                    size="small"
+                    class="task-status"
+                  >
+                    {{ getStatusName(task.status) }}
+                  </el-tag>
+                </div>
+                
+                <div class="task-content">
+                  <div class="task-location">
+                    <el-icon><Location /></el-icon>
+                    目标: {{ getLocationDisplayName(task.location_id) }}
+                  </div>
+                  <div class="task-user">
+                    <el-icon><User /></el-icon>
+                    发起人: {{ getUserDisplayName(task.user_id) }}
+                  </div>
+                  <div class="task-user">
+                    <el-icon><User /></el-icon>
+                    接收人: {{ getUserDisplayName(task.receiver) }}
+                  </div>
+                  <div class="task-description">
+                    {{ task.description || '无描述' }}
+                  </div>
+                  <div class="task-time">
+                    <el-icon><Clock /></el-icon>
+                    创建时间: {{ formatTime(task.created_at) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空队列提示 -->
+        <div v-if="getTotalQueueCount() === 0" class="empty-queue">
+          <el-empty description="队列为空，暂无任务" />
         </div>
       </div>
     </div>
@@ -147,26 +232,34 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { taskApiService, type TaskData } from '@/services/taskApiService'
+import { taskApiService } from '@/services/taskApiService'
+import { nameMapService } from '@/services/nameMapService'
 import { 
   List, 
   Refresh, 
   Location, 
   User, 
   Clock,
-  CircleCheck,
-  Warning,
-  Right,
-  Check
+  VideoPlay,
+  Right
 } from '@element-plus/icons-vue'
 
 // 状态数据
-const taskQueue = ref<TaskData[]>([])
+const queueStatus = ref<any>(null)
 const isRefreshing = ref(false)
 const isStarting = ref(false)
 const isSendingNext = ref(false)
-const isHandlingArrival = ref(false)
-const queueStatus = ref<any>(null)
+
+// 计算属性
+const canStartTask = computed(() => {
+  // 总是可以点击，让后端处理是否能启动的逻辑
+  return true
+})
+
+const canContinueTask = computed(() => {
+  return queueStatus.value?.current_execution?.active && 
+         queueStatus.value?.current_execution?.waiting_for_next
+})
 
 // 辅助函数
 const getTotalQueueCount = () => {
@@ -174,49 +267,41 @@ const getTotalQueueCount = () => {
   return Object.values(queueStatus.value.queues).reduce((total: number, count: any) => total + (count || 0), 0)
 }
 
+// 名称映射函数
+const getUserDisplayName = (userId: string): string => {
+  return nameMapService.getUserName(userId)
+}
+
+const getLocationDisplayName = (locationId: string): string => {
+  return nameMapService.getLocationName(locationId)
+}
+
 // 初始化
 onMounted(async () => {
+  // 初始化名称映射服务
+  await nameMapService.initialize()
+  
   await refreshQueue()
   
-  // 定期刷新队列状态（降低频率）
-  setInterval(refreshQueue, 10000)
+  // 定期刷新队列状态
+  setInterval(refreshQueue, 8000)
 })
 
 // 方法
 const refreshQueue = async () => {
   try {
     isRefreshing.value = true
-    const statusResponse = await taskApiService.getQueueStatus()
+    const response = await taskApiService.getQueueStatus()
     
-    if (statusResponse.success && statusResponse.data) {
-      queueStatus.value = statusResponse.data
-      
-      // 合并所有优先级的任务到一个数组中，用于显示
-      const allTasks: TaskData[] = []
-      
-      // 添加所有队列中的任务
-      if (statusResponse.data.queue_summary) {
-        Object.values(statusResponse.data.queue_summary).forEach((levelTasks: any) => {
-          if (Array.isArray(levelTasks)) {
-            allTasks.push(...levelTasks)
-          }
-        })
-      }
-      
-      // 如果有正在执行的任务，添加到列表开头
-      if (statusResponse.data.current_executing_task) {
-        allTasks.unshift(statusResponse.data.current_executing_task)
-      }
-      
-      taskQueue.value = allTasks
+    if (response.success && response.data) {
+      queueStatus.value = response.data
+      console.log('队列状态已更新:', response.data)
     } else {
-      taskQueue.value = []
       ElMessage.error('获取任务队列失败')
     }
   } catch (error: any) {
     console.error('获取任务队列失败:', error)
     ElMessage.error(error.message || '获取任务队列失败')
-    taskQueue.value = []
   } finally {
     isRefreshing.value = false
   }
@@ -231,11 +316,16 @@ const startNextTask = async () => {
       ElMessage.success(result.message || '任务已启动')
       await refreshQueue()
     } else {
+      // 如实显示后端返回的错误信息
       ElMessage.error(result.message || '启动任务失败')
     }
   } catch (error: any) {
     console.error('启动任务失败:', error)
-    ElMessage.error(error.message || '启动任务失败')
+    // 显示详细的错误信息
+    const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        '启动任务失败'
+    ElMessage.error(errorMessage)
   } finally {
     isStarting.value = false
   }
@@ -260,82 +350,10 @@ const sendNextCommand = async () => {
   }
 }
 
-const handleRobotArrival = async () => {
-  try {
-    isHandlingArrival.value = true
-    
-    const result = await taskApiService.robotArrived()
-    if (result.success) {
-      ElMessage.success(result.message || '已处理机器人到达')
-      await refreshQueue()
-    } else {
-      ElMessage.error(result.message || '处理机器人到达失败')
-    }
-  } catch (error: any) {
-    console.error('处理机器人到达失败:', error)
-    ElMessage.error(error.message || '处理机器人到达失败')
-  } finally {
-    isHandlingArrival.value = false
-  }
-}
-
-const startTask = async (task: TaskData) => {
-  try {
-    await ElMessageBox.confirm(
-      `确认启动下一个任务？`,
-      '确认操作',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'info',
-      }
-    )
-
-    const result = await taskApiService.startTask()
-    if (result.success) {
-      ElMessage.success(result.message || '任务已启动')
-      await refreshQueue()
-    } else {
-      ElMessage.error(result.message || '启动任务失败')
-    }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      console.error('启动任务失败:', error)
-      ElMessage.error(error.message || '启动任务失败')
-    }
-  }
-}
-
-const cancelTask = async (task: TaskData) => {
-  try {
-    await ElMessageBox.confirm(
-      `确认取消任务 "${task.description}"？`,
-      '确认取消',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-
-    const result = await taskApiService.cancelTask(task.task_id)
-    if (result.success) {
-      ElMessage.success(result.message || '任务已取消')
-      await refreshQueue()
-    } else {
-      ElMessage.error(result.message || '取消任务失败')
-    }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      console.error('取消任务失败:', error)
-      ElMessage.error(error.message || '取消任务失败')
-    }
-  }
-}
-
 // 工具方法
 const getTaskTypeColor = (securityLevel: string) => {
   const colors = {
+    L0: 'info',
     L1: 'success',
     L2: 'warning', 
     L3: 'danger'
@@ -343,20 +361,34 @@ const getTaskTypeColor = (securityLevel: string) => {
   return colors[securityLevel as keyof typeof colors] || 'info'
 }
 
-const getTaskTypeName = (securityLevel: string) => {
-  const names = {
-    L1: 'L1级别',
-    L2: 'L2级别',
-    L3: 'L3级别'
+const getQueueLevelColor = (level: string) => {
+  const colors = {
+    L0: 'info',
+    L1: 'success',
+    L2: 'warning',
+    L3: 'danger'
   }
-  return names[securityLevel as keyof typeof names] || securityLevel
+  return colors[level as keyof typeof colors] || 'info'
+}
+
+const getQueueLevelName = (level: string) => {
+  const names = {
+    L0: '降级队列',
+    L1: '普通优先级',
+    L2: '中等优先级',
+    L3: '高级优先级'
+  }
+  return names[level as keyof typeof names] || level
 }
 
 const getStatusTypeColor = (status: string) => {
   const colors = {
     pending: 'info',
     executing: 'warning',
+    arrived: 'success',
     completed: 'success',
+    completed_in_queue: 'success',
+    waiting_in_queue: 'info',
     failed: 'danger'
   }
   return colors[status as keyof typeof colors] || 'info'
@@ -368,34 +400,46 @@ const getStatusName = (status: string) => {
     executing: '执行中',
     arrived: '已到达',
     completed: '已完成',
+    completed_in_queue: '已完成',
+    waiting_in_queue: '等待中',
     failed: '失败'
   }
   return names[status as keyof typeof names] || status
 }
 
-const getTaskProgress = (task: TaskData) => {
-  // 模拟进度计算
-  if (task.status === 'executing') {
-    const elapsed = Date.now() - new Date(task.updated_at || task.created_at).getTime()
-    const estimated = 5 * 60 * 1000 // 5分钟预估
-    return Math.min(Math.floor((elapsed / estimated) * 100), 95)
+const getExecutionStatusColor = (status: string) => {
+  const colors = {
+    completed_in_queue: 'success',
+    executing: 'warning',
+    waiting_in_queue: 'info'
+  }
+  return colors[status as keyof typeof colors] || 'info'
+}
+
+const getExecutionStatusName = (status: string) => {
+  const names = {
+    completed_in_queue: '已完成',
+    executing: '执行中',
+    waiting_in_queue: '等待中'
+  }
+  return names[status as keyof typeof names] || status
+}
+
+const getTaskProgressPercentage = (task: any) => {
+  if (!task.progress) return 0
+  
+  // 解析形如 "2/3" 的进度字符串
+  const match = task.progress.match(/(\d+)\/(\d+)/)
+  if (match) {
+    const current = parseInt(match[1])
+    const total = parseInt(match[2])
+    return Math.floor((current / total) * 100)
   }
   return 0
 }
 
-const getProgressStatus = (task: TaskData) => {
-  const progress = getTaskProgress(task)
-  if (progress > 80) return 'warning'
-  return 'success'
-}
-
-const getProgressText = (task: TaskData) => {
-  if (task.status === 'executing') return '正在执行任务...'
-  if (task.status === 'arrived') return '机器人已到达目标位置'
-  return '执行中...'
-}
-
 const formatTime = (timeStr: string) => {
+  if (!timeStr) return '未知'
   return new Date(timeStr).toLocaleString('zh-CN')
 }
 </script>
@@ -426,18 +470,17 @@ const formatTime = (timeStr: string) => {
 
 .card-header > span {
   flex: 1;
-  margin-left: 0.5rem;
+  margin-left: 8px;
 }
 
 .queue-stats {
   display: flex;
-  gap: 0.5rem;
-  margin-left: auto;
-  margin-right: 1rem;
+  gap: 8px;
+  align-items: center;
 }
 
 .refresh-btn {
-  margin-left: auto;
+  margin-left: 12px;
 }
 
 .queue-container {
@@ -445,87 +488,166 @@ const formatTime = (timeStr: string) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0;
+  min-height: 0; /* 允许flex子元素收缩 */
 }
 
 .queue-controls {
-  flex-shrink: 0;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  flex-shrink: 0; /* 防止压缩 */
 }
 
 .control-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-.empty-queue {
+.scrollable-content {
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px; /* 为滚动条留出空间 */
+}
+
+.execution-status {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  /* 移除flex-shrink: 0，让它可以根据内容调整大小 */
+}
+
+.status-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2rem 0;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.queue-details {
+  /* 移除flex和overflow设置，让它自然布局 */
+}
+
+.queue-level {
+  margin-bottom: 16px;
 }
 
 .task-list {
-  flex: 1;
-  overflow-y: auto;
+  /* 移除flex和overflow设置，让它自然布局 */
+}
+
+.status-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.execution-details {
+  margin-top: 12px;
+}
+
+.execution-info {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding-right: 8px;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #666;
+}
+
+.current-task h5,
+.arrived-task h5 {
+  margin: 12px 0 8px 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.task-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.task-card.current-executing {
+  border-color: #f56c6c;
+  background: #fef2f2;
+}
+
+.task-card.arrived {
+  border-color: #67c23a;
+  background: #f0f9ff;
+}
+
+.level-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.level-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.task-list {
+  /* 移除flex和overflow设置，让它自然布局 */
 }
 
 .task-item {
   border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 0.8rem;
-  transition: all 0.3s;
-  background: #fff;
-  margin-bottom: 0.5rem;
-  flex-shrink: 0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: white;
+  transition: all 0.3s ease;
 }
 
 .task-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  border-color: #c6e2ff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.task-active {
-  border-color: #e6a23c;
-  background-color: #fdf6ec;
+.task-item.task-active {
+  border-color: #409eff;
+  background: #ecf5ff;
 }
 
 .task-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .task-index {
-  font-weight: 600;
-  color: #606266;
-  font-size: 0.85rem;
-  flex-shrink: 0;
+  font-weight: bold;
+  color: #666;
+  font-size: 12px;
 }
 
-.task-status {
-  margin-left: auto;
-  flex-shrink: 0;
+.task-order {
+  background: #409eff;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .task-content {
-  margin: 0.5rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .task-location,
@@ -534,51 +656,112 @@ const formatTime = (timeStr: string) => {
 .task-time {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  line-height: 1.4;
-  word-break: break-word;
+  margin-bottom: 4px;
+  color: #666;
 }
 
-.task-description {
+.task-location .el-icon,
+.task-user .el-icon,
+.task-time .el-icon {
+  margin-right: 6px;
   color: #909399;
-  font-style: italic;
-  font-size: 0.8rem;
 }
 
-.task-actions {
+.task-info {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
 }
-.task-time {
+
+.task-info span {
+  display: block;
+}
+
+.execution-queue {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.execution-queue h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.execution-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #666;
+}
+
+.execution-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.execution-task {
+  padding: 8px 12px;
+  margin-bottom: 0;
+}
+
+.execution-task.task-completed {
+  background: #f0f9ff;
+  border-color: #67c23a;
+}
+
+.execution-task.task-executing {
+  background: #fef2f2;
+  border-color: #f56c6c;
+}
+
+.execution-task.task-waiting {
+  background: #f5f7fa;
+  border-color: #e4e7ed;
+}
+
+.empty-queue {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-  color: #606266;
+  justify-content: center;
+  min-height: 200px;
+  margin: 20px 0;
 }
 
-.task-description {
-  color: #303133;
-  font-size: 0.9rem;
-  margin: 0.25rem 0;
+.task-status {
+  margin-left: 8px;
 }
 
-.task-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
 
-.task-progress {
-  margin-top: 0.5rem;
-}
+  .queue-stats {
+    order: 1;
+  }
 
-.progress-text {
-  font-size: 0.8rem;
-  color: #909399;
-  margin-top: 0.25rem;
-  text-align: center;
+  .refresh-btn {
+    margin-left: 0;
+    order: 2;
+  }
+
+  .execution-info {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .control-buttons {
+    flex-direction: column;
+  }
 }
 </style>

@@ -23,32 +23,78 @@ export interface TaskApiResponse {
 
 export interface TaskData {
   task_id: string
+  task_type: string
   user_id: string
   receiver: string
   location_id: string
+  location_label?: string
   security_level: string
   description?: string
   status: string
   created_at: string
   updated_at?: string
   locker_id?: string
+  progress?: string
+  current_target?: number
+  execution_order?: number
 }
 
 export interface QueueStatusResponse {
   success: boolean
   data: {
-    total_tasks: number
-    pending_tasks: number
-    executing_tasks: number
-    high_priority_count: number
-    medium_priority_count: number
-    low_priority_count: number
+    queues: {
+      L0: number
+      L1: number
+      L2: number
+      L3: number
+    }
+    queue_details: {
+      L0: TaskData[]
+      L1: TaskData[]
+      L2: TaskData[]
+      L3: TaskData[]
+    }
     current_executing_task?: TaskData
-    next_pending_task?: TaskData
-    queue_summary: {
-      high_priority: TaskData[]
-      medium_priority: TaskData[]
-      low_priority: TaskData[]
+    arrived_task?: {
+      task_id: string
+      location_id: string
+      receiver: string
+      arrived_at: number
+      waiting_time: number
+      timeout_remaining: number
+      status: string
+    }
+    execution_queue: {
+      all_tasks: TaskData[]
+      completed_in_queue: TaskData[]
+      total_in_queue: number
+      completed_count: number
+      remaining_count: number
+    }
+    completed_tasks: TaskData[]
+    current_execution: {
+      active: boolean
+      current_queue_level: string | null
+      completed_count: number
+      total_count: number
+      waiting_for_next: boolean
+      command_sent: boolean
+      started: boolean
+      progress: string
+      current_task_index: number | null
+      remaining_tasks: number
+    }
+    ros2_bridge: {
+      available: boolean
+      status: string
+      url: string
+    }
+    summary: {
+      total_pending_tasks: number
+      executing_tasks: number
+      completed_tasks: number
+      execution_queue_tasks: number
+      total_tasks: number
     }
   }
 }
