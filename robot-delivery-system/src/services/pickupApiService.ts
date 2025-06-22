@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8000'
@@ -54,7 +54,7 @@ export class PickupApiService {
    */
   async getPickupTasks(userId: string): Promise<PickupTasksResponse> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/pickup/tasks`, {
+      const response = await api.get('/api/pickup/tasks', {
         params: { user_id: userId }
       })
       return response.data
@@ -78,7 +78,7 @@ export class PickupApiService {
    */
   async executePickup(request: PickupExecuteRequest): Promise<PickupExecuteResponse> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/pickup/execute`, request)
+      const response = await api.post('/api/pickup/execute', request)
       return response.data
     } catch (error: any) {
       if (error.response?.data) {

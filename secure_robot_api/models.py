@@ -110,3 +110,9 @@ class PickupExecuteResponse(BaseModel):
     locker_id: Optional[str] = None  # 分配的柜子ID
     pickup_time: Optional[str] = None  # 取件时间
     auth_status: Optional[Dict] = None  # 认证状态
+
+class LockerStatusResponse(BaseModel):
+    success: bool
+    total_lockers: int
+    lockers: List[Dict]
+    message: Optional[str] = None

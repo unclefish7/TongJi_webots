@@ -334,7 +334,8 @@ const submitCall = async () => {
         receiver: user.user_id, // 呼叫任务的接收人就是发起人
         location_id: callForm.location,
         security_level: 'L1' as 'L1' | 'L2' | 'L3', // 呼叫任务默认L1级别
-        description: `用户呼叫机器人到${callForm.location}`
+        task_type: 'call' as 'call' | 'send', // 呼叫任务类型
+        description: `${callForm.priority === 'urgent' ? '紧急' : '普通'}呼叫机器人到${callForm.location}${callForm.notes ? ` - ${callForm.notes}` : ''}`
       }
 
       const result = await taskApiService.createTask(taskRequest)

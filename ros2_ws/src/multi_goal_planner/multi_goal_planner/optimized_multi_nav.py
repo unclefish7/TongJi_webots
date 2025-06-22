@@ -24,13 +24,22 @@ class OptimizedMultiNav(Node):
         # API端点配置
         self.API_BASE_URL = "http://localhost:8000"
         self.ARRIVED_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/arrived"
-        self.OPTIMIZED_ORDER_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/optimized_order"
+        self.ENHANCED_OPTIMIZED_ORDER_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/enhanced_optimized_order"
+        self.OPTIMIZED_ORDER_API_ENDPOINT = f"{self.API_BASE_URL}/api/tasks/robot/optimized_order"  # 保留兼容性
         
         # 创建订阅者
         self.subscription = self.create_subscription(
             String,
             '/multi_nav_command',
             self.command_callback,
+            10
+        )
+        
+        # 创建增强订阅者（支持任务详细信息）
+        self.enhanced_subscription = self.create_subscription(
+            String,
+            '/enhanced_multi_nav_command',
+            self.enhanced_command_callback,
             10
         )
         
@@ -62,6 +71,8 @@ class OptimizedMultiNav(Node):
         self.waiting_for_next = False  # 标记是否在等待next信号
         self.current_goal_handle = None  # 保存当前的目标句柄用于取消
         self.task_cancelled = False  # 标记任务是否被取消
+        self.current_task_details = []  # 保存当前任务的详细信息（用于增强模式）
+        self.is_enhanced_mode = False  # 标记是否使用增强模式
         
         self.get_logger().info('Optimized Multi Navigation node initialized')
         self.get_logger().info('Using TF to get current robot position')
@@ -330,79 +341,283 @@ class OptimizedMultiNav(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing command: {str(e)}')
 
-    def navigate_to_next_goal(self):
-        """导航到下一个目标点"""
-        if self.current_goal_index >= len(self.current_goals):
-            self.get_logger().info('All goals completed!')
-            self.is_navigating = False
+    def enhanced_command_callback(self, msg):
+        """处理增强的多目标导航命令（包含任务详细信息）"""
+        try:
+            command_data = json.loads(msg.data)
+            
+            if not isinstance(command_data, dict) or 'tasks' not in command_data:
+                self.get_logger().error('Enhanced command must contain "tasks" field')
+                self.get_logger().error(f'Received data structure: {list(command_data.keys()) if isinstance(command_data, dict) else type(command_data)}')
+                return
+            
+            task_details = command_data['tasks']
+            
+            if not isinstance(task_details, list) or len(task_details) == 0:
+                self.get_logger().warn('Received empty task list in enhanced command')
+                return
+            
+            # 记录接收到的任务信息（调试用）
+            self.get_logger().info(f'Received enhanced navigation command with {len(task_details)} tasks')
+            for i, task in enumerate(task_details):
+                self.get_logger().info(f'  Task {i+1}: {task.get("task_id", "NO_ID")} at {task.get("location_name", "NO_LOCATION")} (waiting: {task.get("waiting_time_seconds", 0)}s, timeout_history: {task.get("has_timeout_history", False)})')
+            
+            # 检查是否能获取当前位置
+            current_position = self.get_current_position()
+            if current_position is None:
+                self.get_logger().warn('Current position not available yet, please wait...')
+                return
+            
+            self.get_logger().info(f'Current position: x={current_position["x"]:.2f}, y={current_position["y"]:.2f}')
+            
+            # 验证并准备任务数据
+            valid_tasks = []
+            for task in task_details:
+                if not self.validate_task_detail(task):
+                    self.get_logger().warn(f'Skipping invalid task: {task.get("task_id", "NO_ID")}')
+                    continue
+                
+                location_name = task['location_name']
+                if location_name in self.map_data:
+                    valid_tasks.append(task)
+                else:
+                    self.get_logger().warn(f'Unknown location: {location_name} for task {task.get("task_id", "NO_ID")}')
+            
+            if len(valid_tasks) == 0:
+                self.get_logger().error('No valid tasks found after validation')
+                return
+            
+            self.get_logger().info(f'Successfully validated {len(valid_tasks)} out of {len(task_details)} tasks')
+            
+            # 如果正在导航或等待next信号，取消当前任务并切换到新任务
+            if self.is_navigating or self.waiting_for_next:
+                self.get_logger().info('Switching to new enhanced navigation task, canceling current task')
+                self.cancel_current_navigation()
+            
+            # 重置状态并设置为增强模式
             self.waiting_for_next = False
-            return
-        
-        goal_name = self.current_goals[self.current_goal_index]
-        
-        if goal_name not in self.map_data:
-            self.get_logger().error(f'Goal {goal_name} not found in map data')
-            self.current_goal_index += 1
-            self.navigate_to_next_goal()
-            return
-        
-        # 等待导航服务可用
-        if not self.nav_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().error('Navigation server not available')
-            return
-        
-        # 创建导航目标
-        goal_msg = NavigateToPose.Goal()
-        goal_msg.pose = self.create_pose_stamped(goal_name)
-        
-        self.get_logger().info(f'Navigating to goal {self.current_goal_index + 1}/{len(self.current_goals)}: {goal_name}')
-        
-        # 发送导航目标
-        self.is_navigating = True
-        self.waiting_for_next = False
-        self.task_cancelled = False  # 重置取消标记
-        future = self.nav_client.send_goal_async(goal_msg)
-        future.add_done_callback(self.navigation_response_callback)
-
-    def create_pose_stamped(self, location_name):
-        """从地图数据创建 PoseStamped 消息"""
-        pose_stamped = PoseStamped()
-        pose_stamped.header.frame_id = 'map'
-        pose_stamped.header.stamp = self.get_clock().now().to_msg()
-        
-        location_data = self.map_data[location_name]['pose']
-        
-        # 设置位置
-        pose_stamped.pose.position.x = location_data['position']['x']
-        pose_stamped.pose.position.y = location_data['position']['y']
-        pose_stamped.pose.position.z = location_data['position']['z']
-        
-        # 设置方向
-        pose_stamped.pose.orientation.x = location_data['orientation']['x']
-        pose_stamped.pose.orientation.y = location_data['orientation']['y']
-        pose_stamped.pose.orientation.z = location_data['orientation']['z']
-        pose_stamped.pose.orientation.w = location_data['orientation']['w']
-        
-        return pose_stamped
-
-    def navigation_response_callback(self, future):
-        """处理导航响应"""
-        goal_handle = future.result()
-        
-        if not goal_handle.accepted:
-            self.get_logger().error('Navigation goal rejected')
             self.is_navigating = False
-            self.current_goal_handle = None
-            return
+            self.task_cancelled = False
+            self.is_enhanced_mode = True
+            
+            # 计算增强优先级并优化路径
+            optimized_tasks = self.optimize_path_enhanced(valid_tasks, current_position)
+            
+            # 准备导航（提取位置名称）
+            self.current_goals = [task['location_name'] for task in optimized_tasks]
+            self.current_task_details = optimized_tasks
+            self.current_goal_index = 0
+            self.waiting_for_next = True
+            
+            # 通知后端API优化后的任务执行顺序（增强版本）
+            self.notify_backend_enhanced_optimized_order(valid_tasks, optimized_tasks)
+            
+            first_goal_name = self.current_goals[0] if self.current_goals else "unknown"
+            self.get_logger().info(f'Enhanced task ready! Waiting for /next signal to start navigation to: {first_goal_name}')
+            self.get_logger().info('Please publish: ros2 topic pub --once /next std_msgs/String "data: \'start\'"')
+            
+        except json.JSONDecodeError as e:
+            self.get_logger().error(f'Invalid JSON format in enhanced command: {str(e)}')
+            self.get_logger().error(f'Raw message data: {msg.data[:200]}...')  # 显示前200字符
+        except Exception as e:
+            self.get_logger().error(f'Error processing enhanced command: {str(e)}')
+            import traceback
+            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
+
+    def validate_task_detail(self, task):
+        """验证任务详细信息的格式"""
+        required_fields = ['task_id', 'location_name', 'waiting_time_seconds', 'has_timeout_history']
         
-        self.get_logger().info('Navigation goal accepted')
+        for field in required_fields:
+            if field not in task:
+                self.get_logger().error(f'Task missing required field: {field}')
+                return False
         
-        # 保存目标句柄用于后续取消操作
-        self.current_goal_handle = goal_handle
+        # 验证数据类型
+        if not isinstance(task.get('waiting_time_seconds'), (int, float)):
+            self.get_logger().error(f'Task {task["task_id"]}: waiting_time_seconds must be a number')
+            return False
+            
+        if not isinstance(task.get('has_timeout_history'), bool):
+            self.get_logger().error(f'Task {task["task_id"]}: has_timeout_history must be a boolean')
+            return False
         
-        # 等待结果
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.navigation_result_callback)
+        return True
+
+    def calculate_enhanced_priority(self, task, distance_to_current):
+        """
+        在ROS2节点中计算增强优先级
+        结合地理距离、等待时间、超时历史等因素
+        
+        Args:
+            task: 任务详细信息
+            distance_to_current: 到当前位置的距离
+            
+        Returns:
+            float: 综合优先级分数（越低越优先，因为要配合TSP的距离最小化）
+        """
+        # 基础权重配置
+        WAITING_TIME_WEIGHT = 0.5      # 等待时间权重
+        TIMEOUT_HISTORY_WEIGHT = 10.0  # 超时历史权重
+        DISTANCE_WEIGHT = 1.0          # 距离权重
+        TASK_TYPE_WEIGHT = 2.0         # 任务类型权重
+        LEVEL_WEIGHT = 5.0             # 原始安全等级权重
+        
+        # 1. 距离成本（标准化到0-10范围）
+        distance_cost = min(distance_to_current / 10.0, 10.0) * DISTANCE_WEIGHT
+        
+        # 2. 等待时间优势（等待越久，成本越低）
+        waiting_minutes = task['waiting_time_seconds'] / 60.0
+        waiting_advantage = min(waiting_minutes * 0.1, 5.0) * WAITING_TIME_WEIGHT
+        
+        # 3. 超时历史优势（有超时历史的任务优先级更高）
+        timeout_advantage = TIMEOUT_HISTORY_WEIGHT if task['has_timeout_history'] else 0.0
+        
+        # 4. 任务类型调整（call任务成本稍高，优先级稍低）
+        task_type = task.get('task_type', 'send')
+        type_cost = TASK_TYPE_WEIGHT if task_type == 'call' else 0.0
+        
+        # 5. 原始安全等级优势（原始等级越高，成本越低）
+        original_level = task.get('original_security_level', 'L0')
+        level_advantages = {'L3': 3.0, 'L2': 2.0, 'L1': 1.0, 'L0': 0.0}
+        level_advantage = level_advantages.get(original_level, 0.0) * LEVEL_WEIGHT
+        
+        # 计算最终优先级成本（越低越优先）
+        final_cost = distance_cost + type_cost - waiting_advantage - timeout_advantage - level_advantage
+        
+        # 计算最终优先级分数（用于排序和返回给后端）
+        final_priority = 10.0 - min(max(final_cost, 0.0), 10.0)
+        
+        self.get_logger().info(
+            f'Task {task["task_id"]} priority calculation: '
+            f'distance_cost={distance_cost:.2f}, waiting_adv={waiting_advantage:.2f}, '
+            f'timeout_adv={timeout_advantage:.2f}, type_cost={type_cost:.2f}, '
+            f'level_adv={level_advantage:.2f}, final_priority={final_priority:.2f}'
+        )
+        
+        return final_cost, final_priority
+
+    def optimize_path_enhanced(self, task_details, current_position):
+        """
+        使用增强优先级优化路径
+        
+        Args:
+            task_details: 任务详细信息列表
+            current_position: 当前位置
+            
+        Returns:
+            优化后的任务列表（包含计算出的优先级）
+        """
+        if len(task_details) <= 1:
+            # 单个任务也要计算优先级
+            if len(task_details) == 1:
+                task = task_details[0]
+                distance = self.calculate_distance_from_position(current_position, task['location_name'])
+                priority_cost, final_priority = self.calculate_enhanced_priority(task, distance)
+                task['priority_cost'] = priority_cost  # 用于TSP计算
+                task['final_priority'] = round(final_priority, 2)
+                task['distance_from_current'] = round(distance, 2)
+            return task_details
+        
+        # 为每个任务计算增强优先级
+        enhanced_tasks = []
+        for task in task_details:
+            location_name = task['location_name']
+            distance = self.calculate_distance_from_position(current_position, location_name)
+            priority_cost, final_priority = self.calculate_enhanced_priority(task, distance)
+            
+            enhanced_task = task.copy()
+            enhanced_task['priority_cost'] = priority_cost  # 用于TSP计算
+            enhanced_task['final_priority'] = round(final_priority, 2)  # 用于返回给后端
+            enhanced_task['distance_from_current'] = round(distance, 2)
+            enhanced_tasks.append(enhanced_task)
+        
+        # 使用修改的TSP算法（考虑优先级成本）
+        optimized_tasks = self.solve_enhanced_tsp(enhanced_tasks, current_position)
+        
+        self.get_logger().info('Enhanced TSP optimization completed:')
+        for i, task in enumerate(optimized_tasks):
+            self.get_logger().info(
+                f'  {i+1}. {task["task_id"]} at {task["location_name"]} '
+                f'(priority: {task["final_priority"]}, distance: {task["distance_from_current"]}m)'
+            )
+        
+        return optimized_tasks
+
+    def solve_enhanced_tsp(self, enhanced_tasks, current_position):
+        """
+        求解考虑优先级的增强TSP问题
+        使用加权的距离矩阵（距离 + 优先级成本）
+        """
+        n = len(enhanced_tasks)
+        
+        if n <= 6:  # 小规模问题使用精确算法
+            return self.solve_enhanced_tsp_brute_force(enhanced_tasks, current_position)
+        else:  # 大规模问题使用启发式算法
+            return self.solve_enhanced_tsp_heuristic(enhanced_tasks, current_position)
+
+    def solve_enhanced_tsp_brute_force(self, enhanced_tasks, current_position):
+        """使用暴力法求解增强TSP"""
+        import itertools
+        
+        n = len(enhanced_tasks)
+        min_cost = float('inf')
+        best_order = enhanced_tasks[:]
+        
+        # 生成所有可能的排列
+        for perm in itertools.permutations(range(n)):
+            total_cost = 0.0
+            
+            # 从当前位置到第一个任务的成本
+            first_task = enhanced_tasks[perm[0]]
+            distance_to_first = self.calculate_distance_from_position(current_position, first_task['location_name'])
+            total_cost += distance_to_first + first_task['priority_cost']
+            
+            # 任务之间的成本
+            for i in range(len(perm) - 1):
+                current_task = enhanced_tasks[perm[i]]
+                next_task = enhanced_tasks[perm[i + 1]]
+                
+                distance = self.calculate_distance(current_task['location_name'], next_task['location_name'])
+                total_cost += distance + next_task['priority_cost']
+            
+            if total_cost < min_cost:
+                min_cost = total_cost
+                best_order = [enhanced_tasks[i] for i in perm]
+        
+        self.get_logger().info(f'Enhanced TSP brute force solution cost: {min_cost:.2f}')
+        return best_order
+
+    def solve_enhanced_tsp_heuristic(self, enhanced_tasks, current_position):
+        """使用贪心启发式求解增强TSP"""
+        unvisited = enhanced_tasks[:]
+        visited = []
+        current_pos = current_position
+        
+        while unvisited:
+            # 找到成本最低的下一个任务
+            best_task = None
+            best_cost = float('inf')
+            
+            for task in unvisited:
+                if isinstance(current_pos, dict):  # 当前位置是坐标
+                    distance = self.calculate_distance_from_position(current_pos, task['location_name'])
+                else:  # 当前位置是任务
+                    distance = self.calculate_distance(current_pos['location_name'], task['location_name'])
+                
+                total_cost = distance + task['priority_cost']
+                
+                if total_cost < best_cost:
+                    best_cost = total_cost
+                    best_task = task
+            
+            # 移动到最佳任务
+            visited.append(best_task)
+            unvisited.remove(best_task)
+            current_pos = best_task
+        
+        self.get_logger().info(f'Enhanced TSP heuristic solution completed')
+        return visited
 
     def notify_backend_arrived(self):
         """通知后端API机器人已到达目标点"""
@@ -477,6 +692,147 @@ class OptimizedMultiNav(Node):
         except Exception as e:
             self.get_logger().error(f'Error notifying backend API about optimized order: {str(e)}')
             return False
+
+    def notify_backend_enhanced_optimized_order(self, original_tasks, optimized_tasks):
+        """通知后端API增强版的优化任务执行顺序"""
+        try:
+            self.get_logger().info(f'Notifying backend API: enhanced optimized order')
+            
+            # 构建增强的请求数据
+            enhanced_optimized_tasks = []
+            for task in optimized_tasks:
+                enhanced_task_info = {
+                    "task_id": task["task_id"],
+                    "final_priority": task["final_priority"],
+                    "distance_from_current": task.get("distance_from_current", 0.0),
+                    "optimization_reason": self.generate_optimization_reason(task)
+                }
+                enhanced_optimized_tasks.append(enhanced_task_info)
+            
+            request_data = {
+                "optimized_tasks": enhanced_optimized_tasks
+            }
+            
+            # 发送POST请求到后端API
+            response = requests.post(
+                self.ENHANCED_OPTIMIZED_ORDER_API_ENDPOINT,
+                json=request_data,
+                headers={'Content-Type': 'application/json'},
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                self.get_logger().info('Successfully notified backend API about enhanced optimized order')
+                data = response.json()
+                self.get_logger().info(f'Backend response: {data.get("message", "No message")}')
+                return True
+            else:
+                self.get_logger().error(f'Failed to notify backend API about enhanced optimized order: HTTP {response.status_code}')
+                self.get_logger().error(f'Response: {response.text[:100]}')
+                return False
+                
+        except requests.exceptions.ConnectionError:
+            self.get_logger().error('Connection error: Backend API not available for enhanced optimized order notification')
+            return False
+        except requests.exceptions.Timeout:
+            self.get_logger().error('Timeout error: Backend API took too long to respond to enhanced optimized order notification')
+            return False
+        except Exception as e:
+            self.get_logger().error(f'Error notifying backend API about enhanced optimized order: {str(e)}')
+            return False
+
+    def generate_optimization_reason(self, task):
+        """生成优化原因说明"""
+        reasons = []
+        
+        if task.get('has_timeout_history', False):
+            reasons.append('timeout_history')
+        
+        waiting_minutes = task.get('waiting_time_seconds', 0) / 60.0
+        if waiting_minutes > 5:
+            reasons.append('long_waiting')
+        
+        if task.get('final_priority', 0) > 7.0:
+            reasons.append('high_priority')
+        
+        if task.get('task_type') == 'call':
+            reasons.append('call_task')
+        
+        return '_'.join(reasons) if reasons else 'distance_optimization'
+
+    def navigate_to_next_goal(self):
+        """导航到下一个目标点"""
+        if self.current_goal_index >= len(self.current_goals):
+            self.get_logger().info('All goals completed!')
+            self.is_navigating = False
+            self.waiting_for_next = False
+            return
+        
+        goal_name = self.current_goals[self.current_goal_index]
+        
+        if goal_name not in self.map_data:
+            self.get_logger().error(f'Goal {goal_name} not found in map data')
+            self.current_goal_index += 1
+            self.navigate_to_next_goal()
+            return
+        
+        # 等待导航服务可用
+        if not self.nav_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error('Navigation server not available')
+            return
+        
+        # 创建导航目标
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose = self.create_pose_stamped(goal_name)
+        
+        self.get_logger().info(f'Navigating to goal {self.current_goal_index + 1}/{len(self.current_goals)}: {goal_name}')
+        
+        # 发送导航目标
+        self.is_navigating = True
+        self.waiting_for_next = False
+        self.task_cancelled = False  # 重置取消标记
+        future = self.nav_client.send_goal_async(goal_msg)
+        future.add_done_callback(self.navigation_response_callback)
+
+    def create_pose_stamped(self, location_name):
+        """从地图数据创建 PoseStamped 消息"""
+        pose_stamped = PoseStamped()
+        pose_stamped.header.frame_id = 'map'
+        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        
+        location_data = self.map_data[location_name]['pose']
+        
+        # 设置位置
+        pose_stamped.pose.position.x = location_data['position']['x']
+        pose_stamped.pose.position.y = location_data['position']['y']
+        pose_stamped.pose.position.z = location_data['position']['z']
+        
+        # 设置方向
+        pose_stamped.pose.orientation.x = location_data['orientation']['x']
+        pose_stamped.pose.orientation.y = location_data['orientation']['y']
+        pose_stamped.pose.orientation.z = location_data['orientation']['z']
+        pose_stamped.pose.orientation.w = location_data['orientation']['w']
+        
+        return pose_stamped
+
+    def navigation_response_callback(self, future):
+        """处理导航响应"""
+        goal_handle = future.result()
+        
+        if not goal_handle.accepted:
+            self.get_logger().error('Navigation goal rejected')
+            self.is_navigating = False
+            self.current_goal_handle = None
+            return
+        
+        self.get_logger().info('Navigation goal accepted')
+        
+        # 保存目标句柄用于后续取消操作
+        self.current_goal_handle = goal_handle
+        
+        # 等待结果
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.navigation_result_callback)
 
     def navigation_result_callback(self, future):
         """处理导航结果"""

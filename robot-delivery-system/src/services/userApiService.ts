@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8000'
@@ -30,7 +30,7 @@ export class UserApiService {
    */
   async getAllUsers(): Promise<User[]> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/user`)
+      const response = await api.get('/api/user')
       return response.data
     } catch (error: any) {
       console.error('获取用户列表失败:', error)
@@ -43,7 +43,7 @@ export class UserApiService {
    */
   async getUserById(userId: string): Promise<User | null> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/user/${userId}`)
+      const response = await api.get(`/api/user/${userId}`)
       return response.data
     } catch (error: any) {
       if (error.response?.status === 404) {

@@ -595,7 +595,8 @@ const submitSend = async () => {
       receiver: sendForm.receiver, // 使用选择的收件人ID
       location_id: targetLocationId,
       security_level: sendForm.securityLevel as 'L1' | 'L2' | 'L3',
-      description: sendForm.description
+      task_type: 'send' as 'call' | 'send', // 寄送任务类型
+      description: sendForm.description || `${sendForm.securityLevel}级别包裹寄送`
     }
 
     const taskResult = await taskApiService.createTask(taskRequest)

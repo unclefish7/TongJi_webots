@@ -193,6 +193,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { authService, type User, type AuthResponse } from '@/services/authService'
+import { authApiService } from '@/services/authApiService'
 
 // Props
 interface Props {
@@ -290,14 +291,28 @@ const performAuth = async () => {
       }
     }
 
-    const result = await authService.authenticate(authRequest)
+    // 使用基于用途的认证API
+    const result = await authApiService.verifyPurposeAuth(authRequest)
     
-    Object.assign(authResult, result)
-    if (result.success) {
+    if (result.verified) {
+      authResult.success = true
       authResult.message = `认证成功！获得 ${result.verified_level} 级权限`
-      emit('auth-success', selectedUser.value, result)
+      authResult.verified_level = result.verified_level
+      authResult.methods = result.methods
+      authResult.expires_at = result.expires_at
+      
+      // 设置当前用户到authService
+      authService.setCurrentUser(selectedUser.value)
+      
+      emit('auth-success', selectedUser.value, {
+        success: true,
+        verified_level: result.verified_level,
+        methods: result.methods,
+        expires_at: result.expires_at
+      })
     } else {
-      authResult.message = result.error || '认证失败'
+      authResult.success = false
+      authResult.message = result.message || '认证失败'
       emit('auth-failed', authResult.message)
     }
     

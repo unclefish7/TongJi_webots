@@ -94,6 +94,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { systemStatusService, type LockerStatus } from '@/services/systemStatusService'
+import { lockerApiService } from '@/services/lockerApiService'
 import { Grid, Refresh } from '@element-plus/icons-vue'
 
 // Props
@@ -129,8 +130,12 @@ onUnmounted(() => {
 // 方法
 const refreshStatus = async () => {
   try {
-    const lockerStatuses = await systemStatusService.getLockerStatuses()
-    lockers.value = lockerStatuses
+    const response = await lockerApiService.getLockerStatus()
+    if (response.success) {
+      lockers.value = response.lockers
+    } else {
+      ElMessage.error(response.message || '获取柜门状态失败')
+    }
   } catch (error) {
     console.error('刷新柜门状态失败:', error)
     ElMessage.error('刷新柜门状态失败')
@@ -191,11 +196,26 @@ const formatTime = (timeStr: string) => {
   margin-bottom: 1rem;
 }
 
+.locker-status-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.locker-status-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px;
+}
+
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .card-header > span {
@@ -208,20 +228,27 @@ const formatTime = (timeStr: string) => {
 }
 
 .lockers-grid {
+  flex: 1;
+  overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 1rem;
-  padding: 10px 0;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.8rem;
+  padding: 10px 8px 10px 0;
+  align-content: start;
 }
 
 .locker-item {
   border: 2px solid #e4e7ed;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.8rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
   background: #fff;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .locker-item:hover {
@@ -252,18 +279,19 @@ const formatTime = (timeStr: string) => {
 
 .locker-id {
   font-weight: 600;
-  font-size: 1.1rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
   color: #303133;
 }
 
 .locker-status {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .locker-info {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #606266;
+  line-height: 1.2;
 }
 
 .task-id {

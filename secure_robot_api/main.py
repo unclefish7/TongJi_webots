@@ -7,6 +7,7 @@ from api.pickup_api import router as pickup_router
 from api.user_api import router as user_router
 from api.location_api import router as location_router
 from api.voice_api import router as voice_router
+from api.locker_api import router as locker_router
 
 import subprocess
 import requests
@@ -31,6 +32,7 @@ app.include_router(pickup_router, prefix="/api/pickup")
 app.include_router(user_router, prefix="/api/user")
 app.include_router(location_router, prefix="/api/locations")
 app.include_router(voice_router, prefix="/api/voice")
+app.include_router(locker_router, prefix="/api/lockers")
 
 # Ollama进程句柄
 ollama_process = None

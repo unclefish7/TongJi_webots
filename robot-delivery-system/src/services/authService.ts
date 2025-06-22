@@ -48,6 +48,7 @@ export interface UserInfo {
 export class AuthService {
   private static instance: AuthService
   private currentUser: User | null = null
+  private authCache: Map<string, any> = new Map() // 缓存认证结果
   private authToken: string | null = null
 
   static getInstance(): AuthService {

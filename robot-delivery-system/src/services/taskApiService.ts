@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8000'
@@ -23,32 +23,78 @@ export interface TaskApiResponse {
 
 export interface TaskData {
   task_id: string
+  task_type: string
   user_id: string
   receiver: string
   location_id: string
+  location_label?: string
   security_level: string
   description?: string
   status: string
   created_at: string
   updated_at?: string
   locker_id?: string
+  progress?: string
+  current_target?: number
+  execution_order?: number
 }
 
 export interface QueueStatusResponse {
   success: boolean
   data: {
-    total_tasks: number
-    pending_tasks: number
-    executing_tasks: number
-    high_priority_count: number
-    medium_priority_count: number
-    low_priority_count: number
+    queues: {
+      L0: number
+      L1: number
+      L2: number
+      L3: number
+    }
+    queue_details: {
+      L0: TaskData[]
+      L1: TaskData[]
+      L2: TaskData[]
+      L3: TaskData[]
+    }
     current_executing_task?: TaskData
-    next_pending_task?: TaskData
-    queue_summary: {
-      high_priority: TaskData[]
-      medium_priority: TaskData[]
-      low_priority: TaskData[]
+    arrived_task?: {
+      task_id: string
+      location_id: string
+      receiver: string
+      arrived_at: number
+      waiting_time: number
+      timeout_remaining: number
+      status: string
+    }
+    execution_queue: {
+      all_tasks: TaskData[]
+      completed_in_queue: TaskData[]
+      total_in_queue: number
+      completed_count: number
+      remaining_count: number
+    }
+    completed_tasks: TaskData[]
+    current_execution: {
+      active: boolean
+      current_queue_level: string | null
+      completed_count: number
+      total_count: number
+      waiting_for_next: boolean
+      command_sent: boolean
+      started: boolean
+      progress: string
+      current_task_index: number | null
+      remaining_tasks: number
+    }
+    ros2_bridge: {
+      available: boolean
+      status: string
+      url: string
+    }
+    summary: {
+      total_pending_tasks: number
+      executing_tasks: number
+      completed_tasks: number
+      execution_queue_tasks: number
+      total_tasks: number
     }
   }
 }
@@ -78,7 +124,7 @@ export class TaskApiService {
    */
   async createTask(request: TaskApiRequest): Promise<TaskApiResponse> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/create`, request)
+      const response = await api.post('/api/tasks/create', request)
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -97,7 +143,7 @@ export class TaskApiService {
    */
   async completeTask(taskId: string): Promise<TaskApiResponse> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/complete`, {
+      const response = await api.post('/api/tasks/complete', {
         task_id: taskId
       })
       return response.data
@@ -118,7 +164,7 @@ export class TaskApiService {
    */
   async failTask(taskId: string, reason?: string): Promise<TaskApiResponse> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/fail`, {
+      const response = await api.post('/api/tasks/fail', {
         task_id: taskId,
         reason
       })
@@ -140,7 +186,7 @@ export class TaskApiService {
    */
   async cancelTask(taskId: string): Promise<{ success: boolean; code: string; message: string }> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/cancel/${taskId}`)
+      const response = await api.post(`/api/tasks/cancel/${taskId}`)
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -159,7 +205,7 @@ export class TaskApiService {
    */
   async startTask(): Promise<{ success: boolean; code: string; message: string }> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/start`)
+      const response = await api.post('/api/tasks/start')
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -178,7 +224,7 @@ export class TaskApiService {
    */
   async robotArrived(): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/robot/arrived`)
+      const response = await api.post('/api/tasks/robot/arrived')
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -196,7 +242,7 @@ export class TaskApiService {
    */
   async sendNext(): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/tasks/robot/next`)
+      const response = await api.post('/api/tasks/robot/next')
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -214,7 +260,7 @@ export class TaskApiService {
    */
   async getQueueStatus(): Promise<QueueStatusResponse> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/tasks/queue/status`)
+      const response = await api.get('/api/tasks/queue/status')
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -244,7 +290,7 @@ export class TaskApiService {
    */
   async checkROS2Status(): Promise<ROS2StatusResponse> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/tasks/ros2/status`)
+      const response = await api.get('/api/tasks/ros2/status')
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
@@ -267,7 +313,7 @@ export class TaskApiService {
   async getUserTasks(userId: string, status?: string): Promise<{ tasks: TaskData[]; total: number }> {
     try {
       const params = status ? `?status=${status}` : ''
-      const response = await axios.get(`${API_BASE_URL}/api/tasks/user/${userId}${params}`)
+      const response = await api.get(`/api/tasks/user/${userId}${params}`)
       return response.data
     } catch (error: any) {
       console.error('获取用户任务失败:', error)
@@ -280,7 +326,7 @@ export class TaskApiService {
    */
   async getUserPendingPickupTasks(userId: string): Promise<{ tasks: TaskData[]; total: number }> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/tasks/user/${userId}/pending-pickup`)
+      const response = await api.get(`/api/tasks/user/${userId}/pending-pickup`)
       return response.data
     } catch (error: any) {
       console.error('获取待取件任务失败:', error)
@@ -293,7 +339,7 @@ export class TaskApiService {
    */
   async ping(): Promise<{ message: string }> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/tasks/ping`)
+      const response = await api.get('/api/tasks/ping')
       return response.data
     } catch (error: any) {
       throw {
