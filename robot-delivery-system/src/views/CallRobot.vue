@@ -59,20 +59,7 @@
                     :key="robot.id"
                     :label="robot.name"
                     :value="robot.id"
-                  >
-                    <div class="robot-option">
-                      <div class="robot-option-info">
-                        <span>{{ robot.name }}</span>
-                        <el-tag :type="getStatusType(robot.status)" size="small">
-                          {{ getStatusText(robot.status) }}
-                        </el-tag>
-                      </div>
-                      <div class="robot-option-details">
-                        <span>位置: ({{ robot.position.x }}, {{ robot.position.y }})</span>
-                        <span>电量: {{ robot.battery }}%</span>
-                      </div>
-                    </div>
-                  </el-option>
+                  />
                 </el-select>
               </el-form-item>              <!-- 呼叫位置 -->
               <el-form-item label="呼叫位置" prop="location">
@@ -155,73 +142,6 @@
             </el-form>
           </el-card>
         </div>
-
-        <!-- 右侧状态面板 -->
-        <div class="status-section">
-          <!-- 机器人状态 -->
-          <el-card class="status-card">
-            <template #header>
-              <div class="card-header">
-                <el-icon><User /></el-icon>
-                <span>机器人状态</span>
-              </div>
-            </template>
-            <div class="robot-status-list">
-              <div v-for="robot in robotStore.robots" :key="robot.id" class="robot-status-item">
-                <div class="robot-info">
-                  <div class="robot-name">{{ robot.name }}</div>
-                  <el-tag :type="getStatusType(robot.status)" size="small">
-                    {{ getStatusText(robot.status) }}
-                  </el-tag>
-                </div>
-                <div class="robot-position">
-                  位置: ({{ robot.position.x }}, {{ robot.position.y }})
-                </div>
-                <div class="robot-battery">
-                  <el-progress
-                    :percentage="robot.battery"
-                    :stroke-width="6"
-                    :color="getBatteryColor(robot.battery)"
-                  />
-                </div>
-                <div v-if="robot.currentTask" class="robot-task">
-                  {{ robot.currentTask }}
-                </div>
-              </div>
-            </div>
-          </el-card>
-
-          <!-- 柜门状态 -->
-          <el-card class="status-card">
-            <template #header>
-              <div class="card-header">
-                <el-icon><Grid /></el-icon>
-                <span>柜门状态</span>
-              </div>
-            </template>
-            <div class="compartment-grid">
-              <div
-                v-for="compartment in robotStore.compartments"
-                :key="compartment.id"
-                class="compartment-item"
-                :class="{ occupied: compartment.isOccupied }"
-              >
-                <div class="compartment-number">
-                  {{ compartment.floor }}F-{{ compartment.compartmentNumber }}
-                </div>
-                <div class="compartment-level">
-                  <el-tag :type="getLevelType(compartment.securityLevel)" size="small">
-                    {{ compartment.securityLevel }}
-                  </el-tag>
-                </div>
-                <div v-if="compartment.isOccupied" class="compartment-content">
-                  {{ compartment.content }}
-                </div>
-                <div v-else class="compartment-status-text">空闲</div>
-              </div>
-            </div>
-          </el-card>
-        </div>
       </div>
     </div>
 
@@ -267,7 +187,7 @@ import { useUserStore } from '@/stores/user'
 import { locationApiService } from '@/services/locationApiService'
 import { taskApiService } from '@/services/taskApiService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
-import { Phone, Bell, User, Grid, CircleCheck, Close } from '@element-plus/icons-vue'
+import { Phone, Bell, CircleCheck, Close } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const robotStore = useRobotStore()
@@ -343,41 +263,6 @@ const locationText = computed(() => {
 })
 
 // 方法
-const getStatusType = (status: string) => {
-  const types = {
-    idle: 'success',
-    busy: 'warning',
-    error: 'danger',
-    charging: 'info',
-  }
-  return types[status as keyof typeof types] || 'info'
-}
-
-const getStatusText = (status: string) => {
-  const texts = {
-    idle: '空闲',
-    busy: '忙碌',
-    error: '故障',
-    charging: '充电中',
-  }
-  return texts[status as keyof typeof texts] || status
-}
-
-const getBatteryColor = (battery: number) => {
-  if (battery > 60) return '#67c23a'
-  if (battery > 30) return '#e6a23c'
-  return '#f56c6c'
-}
-
-const getLevelType = (level: string) => {
-  const types = {
-    L1: 'success',
-    L2: 'warning',
-    L3: 'danger',
-  }
-  return types[level as keyof typeof types] || 'info'
-}
-
 const submitCall = async () => {
   if (!callFormRef.value) return
 
@@ -502,26 +387,17 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
 }
 
 .content-layout {
-  display: grid;
-  grid-template-columns: 1fr 22vw;
-  gap: 1.5vw;
-  max-width: 100vw;
+  display: flex;
+  justify-content: center;
+  max-width: 800px;
   margin: 0 auto;
 }
 
 .form-section {
-  grid-column: 1;
+  width: 100%;
 }
 
-.status-section {
-  grid-column: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5vh;
-}
-
-.call-form-card,
-.status-card {
+.call-form-card {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border: none;
@@ -531,8 +407,7 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
   animation: slideInUp 0.6s ease-out;
 }
 
-.call-form-card:hover,
-.status-card:hover {
+.call-form-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
@@ -645,103 +520,6 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
   color: #606266;
 }
 
-/* 机器人状态列表 */
-.robot-status-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1vh;
-  max-height: 25vh;
-  overflow-y: auto;
-}
-
-.robot-status-item {
-  padding: 1.5vh 1vw;
-  border: 2px solid #e4e7ed;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
-  transition: all 0.3s ease;
-  animation: fadeInScale 0.5s ease-out;
-}
-
-.robot-status-item:hover {
-  transform: scale(1.02);
-  border-color: #667eea;
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
-}
-
-.robot-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1vh;
-}
-
-.robot-name {
-  font-weight: 600;
-  font-size: 0.8vw;
-  color: #303133;
-}
-
-.robot-position {
-  font-size: 0.7vw;
-  color: #606266;
-  margin-bottom: 1vh;
-}
-
-.robot-battery {
-  margin-bottom: 1vh;
-}
-
-.robot-task {
-  font-size: 0.7vw;
-  color: #909399;
-  font-style: italic;
-}
-
-/* 柜门状态样式 */
-.compartment-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1vw;
-  max-height: 30vh;
-  overflow-y: auto;
-}
-
-.compartment-item {
-  padding: 1.5vh 1vw;
-  border: 2px solid #e4e7ed;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
-  text-align: center;
-  transition: all 0.3s ease;
-  animation: fadeInScale 0.5s ease-out;
-}
-
-.compartment-item:hover {
-  transform: scale(1.05);
-}
-
-.compartment-item.occupied {
-  background: linear-gradient(135deg, #fef0f0 0%, #fee2e2 100%);
-  border-color: #f56c6c;
-}
-
-.compartment-number {
-  font-weight: 600;
-  font-size: 0.7vw;
-  margin-bottom: 0.5vh;
-}
-
-.compartment-level {
-  margin-bottom: 0.5vh;
-}
-
-.compartment-content,
-.compartment-status-text {
-  font-size: 0.6vw;
-  color: #606266;
-}
-
 /* 动画效果 */
 @keyframes slideInUp {
   from {
@@ -768,14 +546,7 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .content-layout {
-    grid-template-columns: 1fr;
-    gap: 3vw;
-  }
-
-  .status-section {
-    grid-column: 1;
-    flex-direction: row;
-    gap: 3vw;
+    max-width: 600px;
   }
 
   .page-title {
@@ -810,17 +581,7 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
   }
 
   .content-layout {
-    grid-template-columns: 1fr;
-    gap: 4vw;
-  }
-
-  .status-section {
-    flex-direction: column;
-    gap: 2vh;
-  }
-
-  .compartment-grid {
-    grid-template-columns: 1fr;
+    max-width: 90vw;
   }
 
   .submit-btn {
@@ -875,29 +636,6 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
 
 :deep(.el-progress-bar__inner) {
   border-radius: 10px;
-}
-
-/* 滚动条样式 */
-.robot-status-list::-webkit-scrollbar,
-.compartment-grid::-webkit-scrollbar {
-  width: 6px;
-}
-
-.robot-status-list::-webkit-scrollbar-track,
-.compartment-grid::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
-}
-
-.robot-status-list::-webkit-scrollbar-thumb,
-.compartment-grid::-webkit-scrollbar-thumb {
-  background: rgba(102, 126, 234, 0.5);
-  border-radius: 3px;
-}
-
-.robot-status-list::-webkit-scrollbar-thumb:hover,
-.compartment-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(102, 126, 234, 0.7);
 }
 
 .current-user-info {
