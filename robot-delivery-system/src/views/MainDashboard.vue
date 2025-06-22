@@ -51,7 +51,7 @@
     </el-header>
     <el-container class="main-container">
       <!-- 左侧状态栏 -->
-      <el-aside width="20%" class="status-sidebar">
+      <el-aside width="25%" class="status-sidebar">
         <!-- 机器人任务队列 -->
         <RobotTaskQueue class="task-queue-card" />
 
@@ -249,32 +249,37 @@ onMounted(() => {
 .status-sidebar {
   display: flex;
   flex-direction: column;
-  /* gap: 15px; */
-  /* padding-right: 15px; */
-  /* height: calc(100vh - 80px); */
-  overflow-y: auto;
-  
-  /* 让内容填满整个高度 */
-  > .status-card {
-    flex-shrink: 0;
-  }
-  
-  /* 让任务队列组件占据剩余空间 */
-  > .task-queue-card {
-    flex: 1;
-    min-height: 300px;
-    overflow: hidden;
-  }
+  gap: 15px;
+  padding: 15px;
+  height: calc(100vh - 80px);
+  overflow: hidden;
 }
 
 .status-card {
-  height: fit-content;
+  flex-shrink: 0;
+  height: auto;
+  max-height: 40%;
   border-radius: 15px;
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
   border: none;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.task-queue-card {
+  flex: 1;
+  min-height: 300px;
+  border-radius: 15px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  border: none;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  overflow: hidden;
 }
 
 .status-card:hover {

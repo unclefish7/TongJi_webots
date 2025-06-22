@@ -25,16 +25,41 @@
 
     <div class="queue-container">
       <!-- 队列控制按钮 -->
-      <div class="queue-controls" v-if="queueStatus && !queueStatus.current_execution?.active && getTotalQueueCount() > 0">
-        <el-button 
-          @click="startNextTask" 
-          type="primary" 
-          size="small"
-          :loading="isStarting"
-        >
-          <el-icon><Refresh /></el-icon>
-          启动下一个任务
-        </el-button>
+      <div class="queue-controls" v-if="queueStatus">
+        <div class="control-buttons">
+          <el-button 
+            v-if="!queueStatus.current_execution?.active && getTotalQueueCount() > 0"
+            @click="startNextTask" 
+            type="primary" 
+            size="small"
+            :loading="isStarting"
+          >
+            <el-icon><Refresh /></el-icon>
+            启动下一个任务
+          </el-button>
+          
+          <el-button 
+            v-if="queueStatus.current_execution?.active"
+            @click="sendNextCommand" 
+            type="success" 
+            size="small"
+            :loading="isSendingNext"
+          >
+            <el-icon><Right /></el-icon>
+            继续下一个任务
+          </el-button>
+          
+          <el-button 
+            v-if="queueStatus.current_execution?.active"
+            @click="handleRobotArrival" 
+            type="warning" 
+            size="small"
+            :loading="isHandlingArrival"
+          >
+            <el-icon><Check /></el-icon>
+            机器人已到达
+          </el-button>
+        </div>
       </div>
 
       <div v-if="taskQueue.length === 0" class="empty-queue">
@@ -130,13 +155,17 @@ import {
   User, 
   Clock,
   CircleCheck,
-  Warning
+  Warning,
+  Right,
+  Check
 } from '@element-plus/icons-vue'
 
 // 状态数据
 const taskQueue = ref<TaskData[]>([])
 const isRefreshing = ref(false)
 const isStarting = ref(false)
+const isSendingNext = ref(false)
+const isHandlingArrival = ref(false)
 const queueStatus = ref<any>(null)
 
 // 辅助函数
@@ -209,6 +238,44 @@ const startNextTask = async () => {
     ElMessage.error(error.message || '启动任务失败')
   } finally {
     isStarting.value = false
+  }
+}
+
+const sendNextCommand = async () => {
+  try {
+    isSendingNext.value = true
+    
+    const result = await taskApiService.sendNext()
+    if (result.success) {
+      ElMessage.success(result.message || '已发送继续指令')
+      await refreshQueue()
+    } else {
+      ElMessage.error(result.message || '发送继续指令失败')
+    }
+  } catch (error: any) {
+    console.error('发送继续指令失败:', error)
+    ElMessage.error(error.message || '发送继续指令失败')
+  } finally {
+    isSendingNext.value = false
+  }
+}
+
+const handleRobotArrival = async () => {
+  try {
+    isHandlingArrival.value = true
+    
+    const result = await taskApiService.robotArrived()
+    if (result.success) {
+      ElMessage.success(result.message || '已处理机器人到达')
+      await refreshQueue()
+    } else {
+      ElMessage.error(result.message || '处理机器人到达失败')
+    }
+  } catch (error: any) {
+    console.error('处理机器人到达失败:', error)
+    ElMessage.error(error.message || '处理机器人到达失败')
+  } finally {
+    isHandlingArrival.value = false
   }
 }
 
@@ -337,6 +404,16 @@ const formatTime = (timeStr: string) => {
 .task-queue-card {
   height: 100%;
   margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-queue-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px;
 }
 
 .card-header {
@@ -344,6 +421,7 @@ const formatTime = (timeStr: string) => {
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .card-header > span {
@@ -363,36 +441,53 @@ const formatTime = (timeStr: string) => {
 }
 
 .queue-container {
-  max-height: calc(100vh - 350px); /* 适应侧边栏高度 */
-  overflow-y: auto;
-  padding: 10px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .queue-controls {
-  display: flex;
-  justify-content: center;
+  flex-shrink: 0;
   margin-bottom: 1rem;
   padding: 0.5rem;
   background-color: #f8f9fa;
   border-radius: 8px;
 }
 
+.control-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .empty-queue {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   padding: 2rem 0;
 }
 
 .task-list {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding-right: 8px;
 }
 
 .task-item {
   border: 1px solid #e4e7ed;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.8rem;
   transition: all 0.3s;
+  background: #fff;
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
 }
 
 .task-item:hover {
@@ -410,27 +505,52 @@ const formatTime = (timeStr: string) => {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .task-index {
   font-weight: 600;
   color: #606266;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .task-status {
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .task-content {
   margin: 0.5rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  font-size: 0.85rem;
 }
 
 .task-location,
 .task-user,
+.task-description,
+.task-time {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.task-description {
+  color: #909399;
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
 .task-time {
   display: flex;
   align-items: center;

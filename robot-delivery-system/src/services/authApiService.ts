@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8000'
@@ -17,6 +17,8 @@ export interface AuthResponse {
   success: boolean
   verified_level?: string
   methods?: string[]
+  expires_at?: string
+  error?: string
 }
 
 export interface PurposeAuthRequest {
@@ -52,11 +54,15 @@ export class AuthApiService {
    * 基于指定认证等级的用户认证验证
    */
   async verifyAuth(request: AuthRequest): Promise<AuthResponse> {
-    // 直接返回认证成功，最高权限
-    return {
-      success: true,
-      verified_level: 'L3',
-      methods: ['card', 'face', 'fingerprint']
+    try {
+      const response = await api.post('/api/auth/verify', request)
+      return response.data
+    } catch (error: any) {
+      console.error('认证验证失败:', error)
+      return {
+        success: false,
+        error: error.response?.data?.detail || '认证失败'
+      }
     }
   }
 
@@ -64,12 +70,15 @@ export class AuthApiService {
    * 基于用途的用户认证验证
    */
   async verifyPurposeAuth(request: PurposeAuthRequest): Promise<PurposeAuthResponse> {
-    // 直接返回认证成功，最高权限
-    return {
-      verified: true,
-      verified_level: 'L3',
-      methods: ['card', 'face', 'fingerprint'],
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    try {
+      const response = await api.post('/api/auth/verify_purpose', request)
+      return response.data
+    } catch (error: any) {
+      console.error('用途认证验证失败:', error)
+      return {
+        verified: false,
+        message: error.response?.data?.detail || '认证失败'
+      }
     }
   }
 
