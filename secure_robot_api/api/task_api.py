@@ -509,3 +509,49 @@ async def complete_pickup(task_id: str):
                 "message": f"Unexpected error: {str(e)}"
             }
         )
+
+@router.post("/robot/enhanced_optimized_order")
+async def robot_enhanced_optimized_order(request: Dict[str, Any]):
+    """
+    处理机器人发送的增强优化任务顺序（支持包含权重的任务信息）
+    
+    请求格式：
+    {
+        "optimized_tasks": [
+            {
+                "task_id": "任务ID",
+                "final_priority": 5.2,
+                "distance_from_current": 15.2,
+                "optimization_reason": "waiting_time_priority"
+            }
+        ]
+    }
+    """
+    try:
+        optimized_tasks = request.get("optimized_tasks", [])
+        
+        if not optimized_tasks:
+            raise HTTPException(status_code=400, detail="Missing optimized_tasks")
+        
+        # 记录接收到的优化结果（调试用）
+        print(f"Received enhanced optimized order with {len(optimized_tasks)} tasks:")
+        for i, task in enumerate(optimized_tasks):
+            task_id = task.get("task_id", "NO_ID")
+            priority = task.get("final_priority", "N/A")
+            distance = task.get("distance_from_current", "N/A")
+            reason = task.get("optimization_reason", "N/A")
+            print(f"  Task {i+1}: {task_id} (priority: {priority}, distance: {distance}m, reason: {reason})")
+        
+        success, message = handle_robot_optimized_order(optimized_tasks)
+        
+        if success:
+            return {
+                "success": True,
+                "message": message,
+                "processed_tasks": len(optimized_tasks)
+            }
+        else:
+            raise HTTPException(status_code=400, detail=message)
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

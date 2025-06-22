@@ -253,6 +253,7 @@ def create_task(user_id: str, receiver: str, location_id: str, security_level: s
             "receiver": receiver,
             "location_id": location_id,
             "security_level": security_level,
+            "original_security_level": security_level,  # 保存原始安全等级用于跟踪降级历史
             "task_type": task_type,
             "locker_id": locker_id  # call任务时为None
         }
@@ -741,30 +742,62 @@ def start_task_execution() -> tuple[bool, str]:
                 # 当前队列优先级更高，不允许抢占
                 return False, f"Cannot start {new_queue_level} queue (priority {new_priority}): {current_queue_level} queue (priority {current_priority}) is running with higher priority"
         
-        # 构建新队列中所有任务的目标点列表
-        targets = []
+        # 构建新队列中所有任务的详细信息（传递给ROS2进行权重计算）
+        task_details = []
         task_ids = []
         for task in new_queue_tasks:
             location = get_location_by_id(task["location_id"])
             if location:
-                targets.append(location["label"])
+                # 计算任务等待时间
+                created_time = task.get("timestamps", {}).get("created") or task.get("created_at", "")
+                waiting_time = 0
+                if created_time:
+                    try:
+                        created_dt = datetime.fromisoformat(created_time.replace('Z', '+00:00'))
+                        waiting_time = (datetime.now() - created_dt.replace(tzinfo=None)).total_seconds()
+                    except:
+                        waiting_time = 0
+                
+                # 检查任务是否有超时历史（通过安全等级变化推断）
+                has_timeout_history = task.get("security_level") != task.get("original_security_level", task.get("security_level"))
+                
+                # 构建任务详细信息（只传递数据，权重计算交给ROS2节点）
+                task_detail = {
+                    "task_id": task["task_id"],
+                    "location_name": location["label"],
+                    "location_id": task["location_id"],
+                    "task_type": task.get("task_type", "send"),
+                    "security_level": task.get("security_level", "L0"),
+                    "original_security_level": task.get("original_security_level", task.get("security_level", "L0")),
+                    "waiting_time_seconds": max(int(waiting_time), 0),  # 确保非负数
+                    "has_timeout_history": bool(has_timeout_history),  # 确保是布尔值
+                    "receiver": task.get("receiver", ""),
+                    "created_at": created_time or "",
+                    "description": task.get("description", "")
+                }
+                
+                task_details.append(task_detail)
                 task_ids.append(task["task_id"])
             else:
                 log_task_operation(task["task_id"], "start_failed", "location_not_found")
         
-        if not targets:
-            return False, f"No valid targets found for {new_queue_level} queue tasks"
+        if not task_details:
+            return False, f"No valid task details found for {new_queue_level} queue tasks"
         
         # 如果发生了抢占，等待一段时间让ROS2系统稳定
         if should_preempt:
             log_task_operation(f"{new_queue_level}_queue", "preemption_delay", "waiting_for_system_stabilization")
             time.sleep(0.5)  # 等待500毫秒让系统稳定
         
-        # 步骤1：发送多目标导航命令到ROS2
-        nav_success, nav_error = send_multi_nav_command_with_retry(targets)
+        # 步骤1：发送增强的多目标导航命令到ROS2（包含任务详细信息）
+        # 记录发送的任务详细信息
+        for i, task_detail in enumerate(task_details):
+            print(f"Task {i+1}: {task_detail['task_id']} at {task_detail['location_name']} (waiting: {task_detail['waiting_time_seconds']}s, timeout_history: {task_detail['has_timeout_history']})")
+        
+        nav_success, nav_error = send_enhanced_multi_nav_command_with_retry(task_details)
         if not nav_success:
-            log_task_operation(f"{new_queue_level}_queue", "start_failed", "ros2_nav_command_failed")
-            return False, f"Failed to send navigation command for {new_queue_level} queue: {nav_error}"
+            log_task_operation(f"{new_queue_level}_queue", "start_failed", "ros2_enhanced_nav_command_failed")
+            return False, f"Failed to send enhanced navigation command for {new_queue_level} queue: {nav_error}"
         
         # 步骤2：如果发生了抢占，增加额外延时后再发送next指令
         if should_preempt:
@@ -795,7 +828,7 @@ def start_task_execution() -> tuple[bool, str]:
             update_task_status(task["task_id"], "delivering")
             log_task_operation(task["task_id"], "started_execution", f"{new_queue_level}_batch_started")
         
-        success_message = f"{new_queue_level} queue started successfully with {len(targets)} targets: {task_ids}"
+        success_message = f"{new_queue_level} queue started successfully with {len(task_details)} enhanced tasks: {task_ids}"
         if should_preempt:
             # 统计重新调度的任务
             total_tasks_in_queue = len(task_queues[new_queue_level]) + len(new_queue_tasks)
@@ -1378,8 +1411,11 @@ def _handle_pickup_timeout():
     downgrade_target = get_downgrade_target(original_level)
     
     if downgrade_target and downgrade_target != original_level:
-        # 更新任务的安全等级为降级后的等级
+        # 更新任务的安全等级为降级后的等级，但保持原始等级不变
         arrived_task["security_level"] = downgrade_target
+        # 确保原始安全等级字段存在且不被修改
+        if "original_security_level" not in arrived_task:
+            arrived_task["original_security_level"] = original_level
         
         # 重置任务状态为pending
         update_task_status(arrived_task["task_id"], "pending")
@@ -1476,13 +1512,12 @@ def clear_arrived_task(task_id: str) -> tuple[bool, str]:
     
     return False, f"Send task {task_id} is not in arrived state"
 
-def handle_robot_optimized_order(original_order: List[str], optimized_order: List[str]) -> tuple[bool, str]:
+def handle_robot_optimized_order(optimized_tasks: List[Dict]) -> tuple[bool, str]:
     """
-    处理机器人优化后的任务执行顺序
+    处理机器人优化后的任务执行顺序（支持增强的任务信息）
     
     Args:
-        original_order: 原始任务顺序（位置名称列表）
-        optimized_order: 优化后的任务顺序（位置名称列表）
+        optimized_tasks: 优化后的任务列表，包含task_id和优化后的顺序信息
         
     Returns:
         tuple[bool, str]: (是否成功, 消息)
@@ -1494,28 +1529,22 @@ def handle_robot_optimized_order(original_order: List[str], optimized_order: Lis
         if not current_execution["active"]:
             return False, "No active task queue to reorder"
         
-        # 验证优化后的顺序包含所有原始任务
-        if set(original_order) != set(optimized_order):
-            return False, "Optimized order does not match original tasks"
-        
         current_queue_level = current_execution["current_queue_level"]
         current_queue_tasks = current_execution["queue_tasks"]
         
-        # 创建位置名称到任务的映射
-        location_to_task = {}
+        # 创建任务ID到任务的映射
+        task_id_to_task = {}
         for task in current_queue_tasks:
-            location = get_location_by_id(task["location_id"])
-            if location:
-                location_name = location["label"]
-                location_to_task[location_name] = task
+            task_id_to_task[task["task_id"]] = task
         
         # 根据优化后的顺序重新排列任务
         reordered_tasks = []
-        for location_name in optimized_order:
-            if location_name in location_to_task:
-                reordered_tasks.append(location_to_task[location_name])
+        for optimized_task in optimized_tasks:
+            task_id = optimized_task.get("task_id")
+            if task_id in task_id_to_task:
+                reordered_tasks.append(task_id_to_task[task_id])
             else:
-                log_task_operation(f"{current_queue_level}_queue", "reorder_warning", f"location_{location_name}_not_found")
+                log_task_operation(f"{current_queue_level}_queue", "reorder_warning", f"task_{task_id}_not_found")
         
         if len(reordered_tasks) != len(current_queue_tasks):
             return False, f"Task count mismatch: original {len(current_queue_tasks)}, reordered {len(reordered_tasks)}"
@@ -1527,10 +1556,80 @@ def handle_robot_optimized_order(original_order: List[str], optimized_order: Lis
         original_task_ids = [task["task_id"] for task in current_queue_tasks]
         reordered_task_ids = [task["task_id"] for task in reordered_tasks]
         
-        log_task_operation(f"{current_queue_level}_queue", "tasks_reordered", 
-                         f"original_order: {original_task_ids}, optimized_order: {reordered_task_ids}")
+        # 记录优化信息（如果有权重信息的话）
+        optimization_info = []
+        for optimized_task in optimized_tasks:
+            if "final_priority" in optimized_task:
+                optimization_info.append(f"{optimized_task['task_id']}(priority:{optimized_task['final_priority']})")
         
-        return True, f"Successfully reordered {len(reordered_tasks)} tasks in {current_queue_level} queue based on TSP optimization"
+        optimization_details = f"optimization_details: {optimization_info}" if optimization_info else ""
+        
+        log_task_operation(f"{current_queue_level}_queue", "tasks_reordered", 
+                         f"original_order: {original_task_ids}, optimized_order: {reordered_task_ids}, {optimization_details}")
+        
+        return True, f"Successfully reordered {len(reordered_tasks)} tasks in {current_queue_level} queue based on enhanced TSP optimization"
         
     except Exception as e:
         return False, f"Error reordering tasks: {str(e)}"
+
+
+
+def send_enhanced_multi_nav_command_with_retry(task_details: List[Dict], max_retries: int = 3) -> tuple[bool, str]:
+    """
+    发送增强的多目标导航命令到ROS2（包含任务详细信息，带重试机制）
+    
+    Args:
+        task_details: 任务详细信息列表，包含位置、权重、等待时间等
+        max_retries: 最大重试次数
+        
+    Returns:
+        tuple[bool, str]: (是否发送成功, 错误信息)
+    """
+    last_error = ""
+    
+    for attempt in range(max_retries):
+        try:
+            # 构建增强的ROS2消息格式
+            enhanced_data = {
+                "tasks": task_details,
+                "timestamp": datetime.now().isoformat(),
+                "scheduler_version": "enhanced_v1.0"
+            }
+            
+            ros_data = {
+                "topic": "/enhanced_multi_nav_command",  # 使用新的话题名
+                "type": "std_msgs/String",
+                "data": {
+                    "data": json.dumps(enhanced_data, ensure_ascii=False)  # 支持中文字符
+                }
+            }
+            
+            # 发送HTTP请求到ROS2桥接
+            response = requests.post(
+                ROS2_BRIDGE_URL,
+                json=ros_data,
+                headers={'Content-Type': 'application/json'},
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                return True, ""
+            else:
+                try:
+                    error_data = response.json()
+                    last_error = f"HTTP {response.status_code}: {error_data.get('error', response.text)}"
+                except:
+                    last_error = f"HTTP {response.status_code}: {response.text}"
+                
+        except requests.exceptions.ConnectionError as e:
+            last_error = f"Connection error: ROS2 bridge service not available (attempt {attempt + 1}/{max_retries})"
+        except requests.exceptions.Timeout as e:
+            last_error = f"Timeout error: ROS2 bridge took too long to respond (attempt {attempt + 1}/{max_retries})"
+        except Exception as e:
+            last_error = f"Unexpected error: {str(e)} (attempt {attempt + 1}/{max_retries})"
+        
+        # 如果不是最后一次尝试，等待后重试
+        if attempt < max_retries - 1:
+            time.sleep(1)
+    
+    return False, last_error
