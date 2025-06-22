@@ -9,7 +9,7 @@ const API_BASE_URL = 'http://localhost:8000'
 // 柜门状态类型定义
 export interface LockerStatus {
   locker_id: string
-  status: 'available' | 'occupied' | 'reserved'
+  status: 'available' | 'occupied'
   task_id?: string
   user_id?: string
   security_level?: string

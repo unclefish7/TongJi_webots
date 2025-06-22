@@ -210,63 +210,6 @@
           </el-card>
         </div>
 
-        <!-- 右侧状态面板 -->
-        <div class="status-section">
-          <!-- 柜门状态 -->
-          <el-card class="status-card">
-            <template #header>
-              <div class="card-header">
-                <el-icon><Grid /></el-icon>
-                <span>柜门状态</span>
-              </div>
-            </template>
-            <div class="compartment-status">
-              <div class="status-summary">
-                <el-descriptions :column="1" size="small">
-                  <el-descriptions-item label="总柜门数">{{
-                    robotStore.compartments.length
-                  }}</el-descriptions-item>
-                  <el-descriptions-item label="可用柜门">{{
-                    availableCompartments.length
-                  }}</el-descriptions-item>
-                  <el-descriptions-item label="已占用">{{
-                    occupiedCompartments.length
-                  }}</el-descriptions-item>
-                </el-descriptions>
-              </div>
-
-              <el-divider />
-
-              <div class="compartment-grid">
-                <div
-                  v-for="compartment in robotStore.compartments"
-                  :key="compartment.id"
-                  class="compartment-item"
-                  :class="{
-                    occupied: compartment.isOccupied,
-                    available:
-                      !compartment.isOccupied &&
-                      compartment.securityLevel === sendForm.securityLevel,
-                    selected: selectedCompartment?.id === compartment.id,
-                  }"
-                >
-                  <div class="compartment-number">
-                    {{ compartment.floor }}F-{{ compartment.compartmentNumber }}
-                  </div>
-                  <div class="compartment-level">
-                    <el-tag :type="getLevelType(compartment.securityLevel)" size="small">
-                      {{ compartment.securityLevel }}
-                    </el-tag>
-                  </div>
-                  <div v-if="compartment.isOccupied" class="compartment-content">
-                    {{ compartment.content }}
-                  </div>
-                  <div v-else class="compartment-status-text">空闲</div>
-                </div>
-              </div>
-            </div>
-          </el-card>
-        </div>
 
         <!-- 左下角：安全等级说明 -->
         <div class="security-info-section">

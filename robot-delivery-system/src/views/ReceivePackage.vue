@@ -12,7 +12,7 @@
         <template #header>
           <div class="card-header">
             <el-icon><Lock /></el-icon>
-            <span>身份认证</span>
+            <span>取件身份认证</span>
           </div>
         </template>
         <div class="auth-prompt">
@@ -150,48 +150,7 @@
               </el-button>
             </el-card>
 
-            <!-- 柜门状态 -->
-            <el-card class="compartment-status-card">
-              <template #header>
-                <div class="card-header">
-                  <div class="header-left">
-                    <el-icon><Grid /></el-icon>
-                    <span>柜门状态</span>
-                  </div>
-                </div>
-              </template>
-              <div class="compartment-grid">
-                <div
-                  v-for="compartment in robotStore.compartments"
-                  :key="compartment.id"
-                  class="compartment-item"
-                  :class="{
-                    occupied: compartment.isOccupied,
-                    'user-package': isUserPackage(compartment),
-                    opening: openingCompartmentId === compartment.id,
-                  }"
-                >
-                  <div class="compartment-number">
-                    {{ compartment.floor }}F-{{ compartment.compartmentNumber }}
-                  </div>
-                  <div class="compartment-level">
-                    <el-tag :type="getLevelType(compartment.securityLevel)" size="small">
-                      {{ compartment.securityLevel }}
-                    </el-tag>
-                  </div>
-                  <div class="compartment-status">
-                    <span v-if="compartment.isOccupied" class="occupied-text">
-                      {{ isUserPackage(compartment) ? '您的包裹' : '已占用' }}
-                    </span>
-                    <span v-else class="available-text">空闲</span>
-                  </div>
-                  <div v-if="openingCompartmentId === compartment.id" class="opening-indicator">
-                    <el-icon class="is-loading"><Loading /></el-icon>
-                    正在开启...
-                  </div>
-                </div>
-              </div>
-            </el-card>
+            
 
             <!-- 取件说明 -->
             <el-card class="help-card">

@@ -166,8 +166,8 @@
           <div class="queue-level" v-for="(level, levelName) in queueStatus.queue_details" :key="levelName">
             <div class="level-header" v-if="level.length > 0">
               <h4>{{ levelName }} 队列 ({{ level.length }}个任务)</h4>
-              <el-tag :type="getQueueLevelColor(levelName as string)" size="small">
-                {{ getQueueLevelName(levelName as string) }}
+              <el-tag :type="getQueueLevelColor(String(levelName))" size="small">
+                {{ getQueueLevelName(String(levelName)) }}
               </el-tag>
             </div>
             

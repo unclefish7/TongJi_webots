@@ -284,7 +284,7 @@ const performAuth = async () => {
     const authRequest = {
       user_id: selectedUser.value.user_id,
       purpose: props.purpose,
-      requested_level: authForm.requested_level,
+      requested_level: authForm.requested_level as "L1" | "L2" | "L3", // 类型断言,
       provided: {
         l2_auth: authForm.l2_auth,
         l3_auth: authForm.l3_auth

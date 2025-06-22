@@ -3,7 +3,7 @@ import api from './api'
 // 柜门状态相关的类型定义
 export interface LockerStatus {
   locker_id: string
-  status: 'available' | 'occupied' | 'maintenance' | 'reserved'
+  status: 'available' | 'occupied'
   task_id?: string
   user_id?: string
   security_level?: string
