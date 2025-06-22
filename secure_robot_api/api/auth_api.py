@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from services.auth_service import verify_auth, verify_purpose_auth, get_auth_cache_status
+from services.auth_service import verify_auth, verify_purpose_auth, get_auth_cache_status, get_auth_cache_details
 from models import AuthRequest, AuthResponse, PurposeAuthRequest, PurposeAuthResponse
 
 router = APIRouter(tags=["authentication"])
@@ -128,4 +128,23 @@ async def get_authentication_cache_status():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get cache status: {str(e)}"
+        )
+
+@router.get("/cache_details")
+async def get_authentication_cache_details():
+    """
+    获取认证缓存详细信息（用于调试和监控）
+    
+    返回寄件认证缓存和取件认证缓存的详细信息，包含所有用户的认证记录
+    """
+    try:
+        details = get_auth_cache_details()
+        return {
+            "success": True,
+            "data": details
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get cache details: {str(e)}"
         )

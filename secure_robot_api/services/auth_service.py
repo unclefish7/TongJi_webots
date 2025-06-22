@@ -474,3 +474,53 @@ def get_auth_cache_status() -> Dict[str, any]:
             "expired_cleaned": expired_count
         }
     }
+
+def get_auth_cache_details() -> Dict[str, any]:
+    """
+    获取认证缓存的详细信息（用于调试和监控）
+    
+    Returns:
+        Dict: 详细的缓存信息，包含所有用户的认证记录
+    """
+    # 清理过期的取件认证
+    clean_expired_pickup_auth()
+    
+    # 获取寄件认证缓存详细信息
+    send_cache_details = {}
+    for user_id, records in auth_session_cache.items():
+        send_cache_details[user_id] = {
+            "total_records": len(records),
+            "records": [
+                {
+                    "level": record["level"],
+                    "used": record["used"],
+                    "timestamp": record["timestamp"] if isinstance(record["timestamp"], str) else record["timestamp"].isoformat(),
+                    "methods": record.get("methods", [])
+                }
+                for record in records
+            ]
+        }
+    
+    # 获取取件认证缓存详细信息
+    pickup_cache_details = {}
+    for user_id, record in pickup_auth_cache.items():
+        pickup_cache_details[user_id] = {
+            "verified_level": record["verified_level"],
+            "started_at": record["started_at"] if isinstance(record["started_at"], str) else record["started_at"].isoformat(),
+            "expires_at": record["expires_at"] if isinstance(record["expires_at"], str) else record["expires_at"].isoformat(),
+            "methods": record.get("methods", [])
+        }
+    
+    return {
+        "send_auth_cache": send_cache_details,
+        "pickup_auth_cache": pickup_cache_details,
+        "cache_summary": {
+            "send_cache_users": len(auth_session_cache),
+            "pickup_cache_users": len(pickup_auth_cache),
+            "send_cache_total_records": sum(len(records) for records in auth_session_cache.values()),
+            "send_cache_available_records": sum(
+                len([r for r in records if not r["used"]]) 
+                for records in auth_session_cache.values()
+            )
+        }
+    }
