@@ -18,9 +18,35 @@
                 {{ currentUser?.auth_level }} 权限
               </el-tag>
             </div>
-            <el-button @click="showUserSwitchModal = true" size="small" type="info" plain>
-              切换用户
-            </el-button>
+            <el-dropdown @command="switchUser" trigger="click">
+              <el-button size="small" type="info" plain>
+                切换用户
+                <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item 
+                    v-for="user in authenticatedUsers" 
+                    :key="user.user_id"
+                    :command="user.user_id"
+                    :disabled="user.user_id === selectedUserId"
+                  >
+                    <div class="user-option">
+                      <span>{{ user.name }} ({{ user.user_id }})</span>
+                      <el-tag :type="getAuthLevelType(user.auth_level)" size="small">
+                        {{ user.auth_level }}
+                      </el-tag>
+                    </div>
+                  </el-dropdown-item>
+                  <el-dropdown-item divided command="add-auth">
+                    <el-button type="primary" text>
+                      <el-icon><Plus /></el-icon>
+                      新增认证
+                    </el-button>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
           <div v-else class="no-auth">
             <el-alert 
@@ -89,12 +115,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRobotStore } from '@/stores/robot'
-import { authService } from '@/services/authService'
+import { authService, type User } from '@/services/authService'
 import {
   Phone,
   Box,
   Download,
-  User,
+  User as UserIcon,
   Monitor,
   Location,
   ZoomIn,
@@ -102,6 +128,8 @@ import {
   Refresh,
   List,
   CircleCheck,
+  ArrowDown,
+  Plus,
 } from '@element-plus/icons-vue'
 import EmbeddedMapViewer from '@/components/EmbeddedMapViewer.vue'
 import RobotTaskQueue from '@/components/RobotTaskQueue.vue'
@@ -112,10 +140,15 @@ const robotStore = useRobotStore()
 
 // 认证相关状态
 const showUserSwitchModal = ref(false)
+const authenticatedUsers = ref<User[]>([])
+const selectedUserId = ref<string>('')
+const loading = ref(false)
 
 // 认证相关计算属性
-const isAuthenticated = computed(() => authService.isAuthenticated())
-const currentUser = computed(() => authService.getCurrentUser())
+const isAuthenticated = computed(() => selectedUserId.value !== '')
+const currentUser = computed(() => {
+  return authenticatedUsers.value.find(user => user.user_id === selectedUserId.value) || null
+})
 
 // 方法
 const getAuthLevelType = (level: string) => {
@@ -127,24 +160,74 @@ const getAuthLevelType = (level: string) => {
   return types[level as keyof typeof types] || 'info'
 }
 
-const handleAuthSuccess = (user: any, authResult: any) => {
-  console.log('用户认证成功:', user, authResult)
-  showUserSwitchModal.value = false
-  
-  // 触发响应式更新
-  nextTick(() => {
-    // 强制重新计算computed属性
-    console.log('认证状态已更新:', authService.isAuthenticated())
-  })
+// 刷新已认证用户列表
+const refreshAuthenticatedUsers = async () => {
+  loading.value = true
+  try {
+    console.log('开始刷新认证用户列表...')
+    const users = await authService.getAuthenticatedSendUsers()
+    console.log('获取到的认证用户:', users)
+    authenticatedUsers.value = users
+    
+    // 如果当前选中的用户仍在已认证用户列表中，保持选择
+    if (selectedUserId.value && users.some(user => user.user_id === selectedUserId.value)) {
+      console.log('当前选中用户仍在认证列表中，保持选择')
+      // 保持原有选择
+    } else if (users.length > 0) {
+      // 如果当前没有选中用户，或选中的用户不在列表中，选择第一个
+      selectedUserId.value = users[0].user_id
+      console.log('自动选择第一个认证用户:', users[0].name)
+    } else {
+      // 没有任何认证用户
+      selectedUserId.value = ''
+      console.log('没有认证用户')
+    }
+  } catch (error) {
+    console.error('刷新认证用户列表失败:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
+// 切换用户
+const switchUser = (userId: string) => {
+  if (userId === 'add-auth') {
+    // 处理新增认证命令
+    showUserSwitchModal.value = true
+    return
+  }
+  
+  selectedUserId.value = userId
+  // 切换现有用户时不需要关闭模态框，因为没有打开
+}
 
-// 方法
+const handleAuthSuccess = async (user: any, authResult: any) => {
+  console.log('用户认证成功:', user, authResult)
+  
+  // 先刷新已认证用户列表
+  await refreshAuthenticatedUsers()
+  
+  // 认证成功后自动切换到新用户
+  if (user && authResult.success) {
+    selectedUserId.value = user.user_id
+    console.log('自动切换到新认证用户:', user.name)
+  }
+  
+  // 不自动关闭认证模态框，让用户手动关闭
+  // showUserSwitchModal.value = false
+}
 
-
-onMounted(() => {
-  // 初始化地图
-  console.log('地图初始化完成')
+onMounted(async () => {
+  // 初始化时刷新已认证用户列表
+  await refreshAuthenticatedUsers()
+  
+  // 如果有已认证用户且当前没有选中用户，自动选择第一个
+  if (authenticatedUsers.value.length > 0 && !selectedUserId.value) {
+    selectedUserId.value = authenticatedUsers.value[0].user_id
+    console.log('自动选择第一个已认证用户:', authenticatedUsers.value[0].name)
+  }
+  
+  console.log('主界面初始化完成')
 })
 </script>
 
@@ -393,6 +476,15 @@ onMounted(() => {
   border: none;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
+}
+
+/* 用户选项样式 */
+.user-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
 /* Element Plus 组件样式覆盖 */

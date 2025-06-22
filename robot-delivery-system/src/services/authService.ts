@@ -20,7 +20,7 @@ export interface User {
 export interface AuthRequest {
   user_id: string
   purpose: 'send' | 'pickup'
-  requested_level: string
+  requested_level: 'L1' | 'L2' | 'L3'
   provided: {
     l2_auth?: string
     l3_auth?: string
@@ -44,12 +44,42 @@ export interface UserInfo {
   expiry: string
 }
 
+// 认证缓存接口
+export interface AuthCacheDetails {
+  send_auth_cache: {
+    [userId: string]: {
+      total_records: number
+      records: Array<{
+        level: string
+        used: boolean
+        timestamp: string
+        methods: string[]
+      }>
+    }
+  }
+  pickup_auth_cache: {
+    [userId: string]: {
+      verified_level: string
+      started_at: string
+      expires_at: string
+      methods: string[]
+    }
+  }
+  cache_summary: {
+    send_cache_users: number
+    pickup_cache_users: number
+    send_cache_total_records: number
+    send_cache_available_records: number
+  }
+}
+
 // 认证服务类
 export class AuthService {
   private static instance: AuthService
   private currentUser: User | null = null
   private authCache: Map<string, any> = new Map() // 缓存认证结果
   private authToken: string | null = null
+  private authCacheDetails: AuthCacheDetails | null = null
 
   static getInstance(): AuthService {
     if (!AuthService.instance) {
@@ -80,29 +110,154 @@ export class AuthService {
     }
   }
 
+  // 获取认证缓存详情
+  async refreshAuthCacheDetails(): Promise<void> {
+    try {
+      const response = await authApiService.getCacheDetails()
+      if (response.success) {
+        this.authCacheDetails = response.data
+      }
+    } catch (error) {
+      console.error('刷新认证缓存失败:', error)
+    }
+  }
+
+  // 获取已认证的发送用户列表
+  async getAuthenticatedSendUsers(): Promise<User[]> {
+    await this.refreshAuthCacheDetails()
+    
+    if (!this.authCacheDetails) {
+      return []
+    }
+
+    const authenticatedUsers: User[] = []
+    const sendCache = this.authCacheDetails.send_auth_cache
+
+    for (const userId in sendCache) {
+      const userCache = sendCache[userId]
+      // 检查是否有可用的认证记录
+      const hasAvailableAuth = userCache.records.some(record => !record.used)
+      
+      if (hasAvailableAuth) {
+        const user = await this.getUserById(userId)
+        if (user) {
+          authenticatedUsers.push(user)
+        }
+      }
+    }
+
+    return authenticatedUsers
+  }
+
+  // 检查用户是否有发送认证
+  async hasSendAuth(userId: string): Promise<boolean> {
+    await this.refreshAuthCacheDetails()
+    
+    if (!this.authCacheDetails) {
+      return false
+    }
+
+    const userCache = this.authCacheDetails.send_auth_cache[userId]
+    if (!userCache) {
+      return false
+    }
+
+    // 检查是否有可用的认证记录
+    return userCache.records.some(record => !record.used)
+  }
+
+  // 检查用户是否有取件认证
+  async hasPickupAuth(userId: string): Promise<boolean> {
+    await this.refreshAuthCacheDetails()
+    
+    if (!this.authCacheDetails) {
+      return false
+    }
+
+    const userCache = this.authCacheDetails.pickup_auth_cache[userId]
+    if (!userCache) {
+      return false
+    }
+
+    // 检查是否过期
+    const expiresAt = new Date(userCache.expires_at)
+    const now = new Date()
+    
+    return now < expiresAt
+  }
+
+  // 获取用户的取件认证信息
+  async getPickupAuthInfo(userId: string): Promise<any> {
+    await this.refreshAuthCacheDetails()
+    
+    if (!this.authCacheDetails) {
+      return null
+    }
+
+    const userCache = this.authCacheDetails.pickup_auth_cache[userId]
+    if (!userCache) {
+      return null
+    }
+
+    // 检查是否过期
+    const expiresAt = new Date(userCache.expires_at)
+    const now = new Date()
+    
+    if (now >= expiresAt) {
+      return null
+    }
+
+    return userCache
+  }
+
   // 进行身份认证
   async authenticate(authRequest: AuthRequest): Promise<AuthResponse> {
-    // 直接返回认证成功，最高权限
-    this.currentUser = {
-      user_id: authRequest.user_id,
-      name: `用户${authRequest.user_id}`,
-      auth_level: 'L3', // 最高权限
-      office_location: 'A区',
-      department: '管理部门'
-    }
-    this.authToken = `${authRequest.user_id}_${Date.now()}`
-    
-    return {
-      success: true,
-      verified_level: 'L3',
-      methods: ['card', 'face', 'fingerprint']
+    try {
+      const response = await authApiService.verifyPurposeAuth(authRequest)
+      
+      if (response.verified) {
+        // 认证成功后刷新缓存
+        await this.refreshAuthCacheDetails()
+        
+        return {
+          success: true,
+          verified_level: response.verified_level,
+          methods: response.methods,
+          expires_at: response.expires_at
+        }
+      } else {
+        return {
+          success: false,
+          error: response.message
+        }
+      }
+    } catch (error) {
+      console.error('认证失败:', error)
+      return {
+        success: false,
+        error: '认证过程中发生错误'
+      }
     }
   }
 
   // 检查取件认证状态
   async checkPickupAuth(userId: string, requiredLevel: string): Promise<boolean> {
-    // 直接返回认证成功
-    return true
+    const hasAuth = await this.hasPickupAuth(userId)
+    if (!hasAuth) {
+      return false
+    }
+
+    const authInfo = await this.getPickupAuthInfo(userId)
+    if (!authInfo) {
+      return false
+    }
+
+    // 检查认证等级是否满足要求
+    const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
+    const userLevel = levelOrder[authInfo.verified_level as keyof typeof levelOrder] || 0
+    const requiredLevelNum = levelOrder[requiredLevel as keyof typeof levelOrder] || 0
+
+    return userLevel >= requiredLevelNum
   }
 
   // 获取当前用户

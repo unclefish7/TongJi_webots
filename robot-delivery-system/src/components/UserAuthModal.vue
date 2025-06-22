@@ -5,6 +5,7 @@
     width="60vw" 
     :before-close="handleClose"
     :close-on-click-modal="false"
+    destroy-on-close
   >
     <div class="auth-container">
       <el-steps :active="currentStep" finish-status="success" align-center>
@@ -147,7 +148,6 @@
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="handleClose">取消</el-button>
         <el-button 
           v-if="currentStep === 0" 
           type="primary" 
@@ -171,17 +171,12 @@
           开始认证
         </el-button>
         <el-button 
-          v-if="currentStep === 2 && authResult.success" 
+          v-if="currentStep === 2" 
           type="primary" 
-          @click="confirmAuth"
+          @click="handleClose"
         >
+          <el-icon><Check /></el-icon>
           确认
-        </el-button>
-        <el-button 
-          v-if="currentStep === 2 && !authResult.success" 
-          @click="resetAuth"
-        >
-          重新认证
         </el-button>
       </div>
     </template>
@@ -189,9 +184,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Check } from '@element-plus/icons-vue'
 import { authService, type User, type AuthResponse } from '@/services/authService'
 import { authApiService } from '@/services/authApiService'
 
@@ -244,6 +239,24 @@ const canUseLevel = (level: string) => {
   const userLevel = levelOrder[selectedUser.value.auth_level as keyof typeof levelOrder] || 0
   const requiredLevel = levelOrder[level as keyof typeof levelOrder] || 0
   return userLevel >= requiredLevel
+}
+
+// 监听模态框开启，当打开时重置状态
+watch(visible, (newValue, oldValue) => {
+  if (newValue && !oldValue) {
+    // 模态框从关闭变为打开时，重置到初始状态
+    resetToStart()
+  }
+})
+
+// 重置到初始状态
+const resetToStart = () => {
+  currentStep.value = 0
+  selectedUser.value = null
+  authForm.l2_auth = ''
+  authForm.l3_auth = ''
+  authForm.requested_level = props.requiredLevel
+  Object.assign(authResult, { success: false, message: '' })
 }
 
 // 方法
@@ -301,9 +314,7 @@ const performAuth = async () => {
       authResult.methods = result.methods
       authResult.expires_at = result.expires_at
       
-      // 设置当前用户到authService
-      authService.setCurrentUser(selectedUser.value)
-      
+      // 认证成功后自动通知切换用户
       emit('auth-success', selectedUser.value, {
         success: true,
         verified_level: result.verified_level,
@@ -329,24 +340,13 @@ const performAuth = async () => {
 }
 
 const confirmAuth = () => {
-  visible.value = false
-}
-
-const resetAuth = () => {
-  currentStep.value = 1
-  authForm.l2_auth = ''
-  authForm.l3_auth = ''
-  Object.assign(authResult, { success: false, message: '' })
+  // 不自动关闭，让用户手动关闭或继续操作
+  // visible.value = false
 }
 
 const handleClose = () => {
   visible.value = false
-  // 重置状态
-  currentStep.value = 0
-  selectedUser.value = null
-  authForm.l2_auth = ''
-  authForm.l3_auth = ''
-  Object.assign(authResult, { success: false, message: '' })
+  // 不在关闭时重置状态，而是在打开时重置
 }
 
 const formatDateTime = (dateStr: string) => {

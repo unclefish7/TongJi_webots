@@ -86,12 +86,30 @@ export class AuthApiService {
    * 获取认证缓存状态
    */
   async getCacheStatus(): Promise<any> {
-    // 直接返回模拟的缓存状态
-    return {
-      success: true,
-      data: {
-        auth_session_cache: {},
-        pickup_auth_cache: {}
+    try {
+      const response = await api.get('/api/auth/cache_status')
+      return response.data
+    } catch (error: any) {
+      console.error('获取缓存状态失败:', error)
+      return {
+        success: false,
+        error: error.response?.data?.detail || '获取缓存状态失败'
+      }
+    }
+  }
+
+  /**
+   * 获取认证缓存详细信息
+   */
+  async getCacheDetails(): Promise<any> {
+    try {
+      const response = await api.get('/api/auth/cache_details')
+      return response.data
+    } catch (error: any) {
+      console.error('获取缓存详情失败:', error)
+      return {
+        success: false,
+        error: error.response?.data?.detail || '获取缓存详情失败'
       }
     }
   }

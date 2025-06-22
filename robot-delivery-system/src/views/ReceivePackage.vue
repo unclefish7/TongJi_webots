@@ -16,16 +16,46 @@
           </div>
         </template>
         <div class="auth-prompt">
-          <el-empty description="请先进行身份认证以查看您的包裹">
+          <el-empty description="请先进行取件身份认证以查看您的包裹">
+            <template #description>
+              <div>
+                <p>取件需要进行专门的身份认证</p>
+                <p>认证有效期：30分钟</p>
+              </div>
+            </template>
             <el-button type="primary" @click="showAuthModal = true">
               <el-icon><Lock /></el-icon>
-              开始身份认证
+              开始取件认证
             </el-button>
           </el-empty>
         </div>
       </el-card>
       <!-- 认证成功后的内容 -->
       <template v-else>
+        <!-- 认证状态提示 -->
+        <el-card class="auth-info-card" v-if="pickupAuthInfo">
+          <div class="auth-info">
+            <div class="auth-user">
+              <el-avatar :size="32">{{ currentUser?.name?.charAt(0) }}</el-avatar>
+              <div class="user-details">
+                <span class="user-name">{{ currentUser?.name }}</span>
+                <el-tag :type="getAuthLevelType(pickupAuthInfo.verified_level)" size="small">
+                  {{ pickupAuthInfo.verified_level }} 级取件权限
+                </el-tag>
+              </div>
+            </div>
+            <div class="auth-time">
+              <span>认证时间: {{ authTime }}</span>
+              <span v-if="pickupAuthInfo.expires_at">
+                有效期至: {{ new Date(pickupAuthInfo.expires_at).toLocaleString('zh-CN') }}
+              </span>
+            </div>
+            <el-button @click="showAuthModal = true" size="small" type="info" plain>
+              重新认证
+            </el-button>
+          </div>
+        </el-card>
+        
         <div class="content-layout">
           <!-- 左侧包裹列表 -->
           <div class="package-section">
@@ -257,7 +287,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
-import { authService } from '@/services/authService'
+import { authService, type User } from '@/services/authService'
 import { pickupApiService } from '@/services/pickupApiService'
 import { systemStatusService } from '@/services/systemStatusService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
@@ -268,7 +298,7 @@ import {
   Location,
   Clock,
   Document,
-  User,
+  User as UserIcon,
   Unlock,
   Grid,
   QuestionFilled,
@@ -288,18 +318,38 @@ const openingPackageId = ref('')
 const openingCompartmentId = ref('')
 const successCompartment = ref('')
 const authTime = ref('')
+const currentPickupUser = ref<User | null>(null)
+const pickupAuthInfo = ref<any>(null)
 
 // 模拟用户包裹数据（这将从后端API获取）
 const userPackages = ref<any[]>([])
 
-// 计算属性
-const isAuthenticated = computed(() => authService.isAuthenticated())
-const userAuthLevel = computed(() => authService.getCurrentUser()?.auth_level || null)
-const currentUser = computed(() => authService.getCurrentUser())
+// 计算属性 - 基于取件认证缓存
+const isAuthenticated = computed(() => currentPickupUser.value !== null)
+const userAuthLevel = computed(() => currentPickupUser.value?.auth_level || null)
+const currentUser = computed(() => currentPickupUser.value)
+
+// 检查取件认证状态
+const checkPickupAuth = async () => {
+  // 这里可以实现检查多个用户的取件认证
+  // 暂时简化为检查当前选中用户
+  if (currentPickupUser.value) {
+    const hasAuth = await authService.hasPickupAuth(currentPickupUser.value.user_id)
+    if (!hasAuth) {
+      currentPickupUser.value = null
+      pickupAuthInfo.value = null
+    } else {
+      pickupAuthInfo.value = await authService.getPickupAuthInfo(currentPickupUser.value.user_id)
+    }
+  }
+}
 
 // 初始化和数据加载
 onMounted(async () => {
-  if (isAuthenticated.value) {
+  // 检查是否有取件认证
+  await checkPickupAuth()
+  
+  if (currentPickupUser.value) {
     await refreshPackages()
   }
 })
@@ -314,6 +364,15 @@ const getLevelType = (level: string) => {
   return types[level as keyof typeof types] || 'info'
 }
 
+const getAuthLevelType = (level: string) => {
+  const types = {
+    'L1': 'success',
+    'L2': 'warning', 
+    'L3': 'danger'
+  }
+  return types[level as keyof typeof types] || 'info'
+}
+
 const isUserPackage = (compartment: any) => {
   return userPackages.value.some((pkg) => pkg.id === compartment.id && compartment.isOccupied)
 }
@@ -322,20 +381,40 @@ const selectPackage = (pkg: any) => {
   selectedPackage.value = pkg
 }
 
-const handleAuthSuccess = (user: any, authResult: any) => {
+const handleAuthSuccess = async (user: User, authResult: any) => {
+  console.log('取件认证成功:', user, authResult)
+  
+  // 设置当前取件用户
+  currentPickupUser.value = user
+  pickupAuthInfo.value = authResult
   authTime.value = new Date().toLocaleString('zh-CN')
-  ElMessage.success(`身份认证成功，欢迎 ${user.name}`)
-  refreshPackages()
+  
+  showAuthModal.value = false
+  
+  // 刷新包裹列表
+  await refreshPackages()
+  
+  ElMessage.success(`取件认证成功，${user.name} 可以进行取件操作`)
 }
 
 const refreshPackages = async () => {
+  if (!currentPickupUser.value) {
+    ElMessage.warning('请先进行取件认证')
+    return
+  }
+
   try {
-    const user = currentUser.value
-    if (!user) {
-      ElMessage.error('用户信息异常')
+    // 检查认证是否仍然有效
+    await checkPickupAuth()
+    
+    if (!currentPickupUser.value) {
+      ElMessage.warning('认证已过期，请重新认证')
+      showAuthModal.value = true
       return
     }
 
+    const user = currentPickupUser.value
+    
     // 获取用户的取件任务列表
     const response = await pickupApiService.getPickupTasks(user.user_id)
     
@@ -441,13 +520,6 @@ const openCompartmentFromDetails = () => {
 const handleSuccessClose = () => {
   showSuccessDialog.value = false
 }
-
-onMounted(() => {
-  // 如果已经认证，设置认证时间
-  if (isAuthenticated.value) {
-    authTime.value = new Date().toLocaleString('zh-CN')
-  }
-})
 </script>
 
 <style scoped>
@@ -467,6 +539,54 @@ onMounted(() => {
 
 .receive-content {
   margin-top: 2vh;
+}
+
+/* 认证信息卡片样式 */
+.auth-info-card {
+  margin-bottom: 1.5vh;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.auth-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #303133;
+}
+
+.auth-time {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #606266;
+  font-size: 14px;
+}
+
+/* 用户选项样式 */
+.user-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
 .content-layout {
