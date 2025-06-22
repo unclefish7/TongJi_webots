@@ -172,11 +172,18 @@
         </el-button>
         <el-button 
           v-if="currentStep === 2" 
+          @click="resetToStart"
+          style="margin-right: 8px"
+        >
+          继续认证
+        </el-button>
+        <el-button 
+          v-if="currentStep === 2" 
           type="primary" 
           @click="handleClose"
         >
           <el-icon><Check /></el-icon>
-          确认
+          完成
         </el-button>
       </div>
     </template>

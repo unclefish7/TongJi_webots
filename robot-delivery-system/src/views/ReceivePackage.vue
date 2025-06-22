@@ -32,13 +32,13 @@
       </el-card>
       <!-- 认证成功后的内容 -->
       <template v-else>
-        <!-- 认证状态提示 -->
-        <el-card class="auth-info-card" v-if="pickupAuthInfo">
-          <div class="auth-info">
+        <!-- 当前认证用户状态提示 -->
+        <el-card class="current-auth-info-card" v-if="pickupAuthInfo && currentPickupUser">
+          <div class="current-auth-info">
             <div class="auth-user">
-              <el-avatar :size="32">{{ currentUser?.name?.charAt(0) }}</el-avatar>
+              <el-avatar :size="32">{{ currentPickupUser?.name?.charAt(0) }}</el-avatar>
               <div class="user-details">
-                <span class="user-name">{{ currentUser?.name }}</span>
+                <span class="user-name">当前用户: {{ currentPickupUser?.name }}</span>
                 <el-tag :type="getAuthLevelType(pickupAuthInfo.verified_level)" size="small">
                   {{ pickupAuthInfo.verified_level }} 级取件权限
                 </el-tag>
@@ -46,13 +46,13 @@
             </div>
             <div class="auth-time">
               <span>认证时间: {{ authTime }}</span>
-              <span v-if="pickupAuthInfo.expires_at">
+              <span v-if="pickupAuthInfo.expires_at" class="expires-info">
                 有效期至: {{ new Date(pickupAuthInfo.expires_at).toLocaleString('zh-CN') }}
               </span>
+              <span class="remaining-time">
+                剩余时间: {{ getAuthTimeRemaining(pickupAuthInfo.expires_at) }}
+              </span>
             </div>
-            <el-button @click="showAuthModal = true" size="small" type="info" plain>
-              重新认证
-            </el-button>
           </div>
         </el-card>
         
@@ -147,37 +147,89 @@
 
           <!-- 右侧状态面板 -->
           <div class="status-section">
-            <!-- 用户信息 -->
+            <!-- 已认证用户管理 -->
             <el-card class="user-info-card">
               <template #header>
                 <div class="card-header">
                   <div class="header-left">
-                    <el-icon><User /></el-icon>
-                    <span>用户信息</span>
+                    <el-icon><UserIcon /></el-icon>
+                    <span>已认证取件用户</span>
                   </div>
+                  <el-button type="primary" size="small" @click="showAuthModal = true">
+                    <el-icon><Lock /></el-icon>
+                    新增认证
+                  </el-button>
                 </div>
               </template>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="认证等级">
-                  <el-tag :type="getLevelType(userAuthLevel || 'L1')">
-                    {{ userAuthLevel }}
-                  </el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="可取包裹">{{
-                  userPackages.length
-                }}</el-descriptions-item>
-                <el-descriptions-item label="认证时间">{{ authTime }}</el-descriptions-item>
-              </el-descriptions>
-              <el-button
-                @click="showAuthModal = true"
-                size="small"
-                type="info"
-                plain
-                style="margin-top: 1vh"
-                class="reauth-btn"
-              >
-                重新认证
-              </el-button>
+              
+              <div v-if="authenticatedPickupUsers.length === 0" class="no-auth-users">
+                <el-empty description="暂无已认证用户" :image-size="60">
+                  <el-button type="primary" @click="showAuthModal = true">
+                    开始认证
+                  </el-button>
+                </el-empty>
+              </div>
+              
+              <div v-else>
+                <!-- 用户选择下拉菜单 -->
+                <div class="user-selection">
+                  <el-form-item label="当前用户:">
+                    <el-select
+                      v-model="currentPickupUserId"
+                      placeholder="请选择用户"
+                      @change="handleUserChange"
+                      class="user-select"
+                    >
+                      <el-option
+                        v-for="user in authenticatedPickupUsers"
+                        :key="user.user_id"
+                        :label="`${user.name} (${user.pickup_auth_info?.verified_level}级)`"
+                        :value="user.user_id"
+                      >
+                        <div class="user-option">
+                          <span class="user-name">{{ user.name }}</span>
+                          <div class="user-meta">
+                            <el-tag :type="getAuthLevelType(user.pickup_auth_info?.verified_level || 'L1')" size="small">
+                              {{ user.pickup_auth_info?.verified_level }}级
+                            </el-tag>
+                            <span class="remaining-time">
+                              剩余: {{ getAuthTimeRemaining(user.pickup_auth_info?.expires_at || '') }}
+                            </span>
+                          </div>
+                        </div>
+                      </el-option>
+                    </el-select>
+                  </el-form-item>
+                </div>
+                
+                <!-- 当前用户详细信息 -->
+                <div v-if="currentPickupUser" class="current-user-info">
+                  <el-descriptions :column="1" border size="small">
+                    <el-descriptions-item label="用户姓名">
+                      {{ currentPickupUser.name }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="认证等级">
+                      <el-tag :type="getAuthLevelType(pickupAuthInfo?.verified_level || 'L1')">
+                        {{ pickupAuthInfo?.verified_level }}
+                      </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="可取包裹">
+                      {{ userPackages.length }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="认证时间">
+                      {{ authTime }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="有效期至">
+                      {{ pickupAuthInfo?.expires_at ? new Date(pickupAuthInfo.expires_at).toLocaleString('zh-CN') : '-' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="剩余时间">
+                      <span class="remaining-time-display">
+                        {{ pickupAuthInfo?.expires_at ? getAuthTimeRemaining(pickupAuthInfo.expires_at) : '-' }}
+                      </span>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </div>
             </el-card>
 
             
@@ -283,7 +335,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
@@ -319,7 +371,11 @@ const openingCompartmentId = ref('')
 const successCompartment = ref('')
 const authTime = ref('')
 const currentPickupUser = ref<User | null>(null)
+const currentPickupUserId = ref<string>('')
 const pickupAuthInfo = ref<any>(null)
+const authenticatedPickupUsers = ref<User[]>([])
+const loadingUsers = ref(false)
+const authCheckInterval = ref<NodeJS.Timeout | null>(null)
 
 // 模拟用户包裹数据（这将从后端API获取）
 const userPackages = ref<any[]>([])
@@ -328,29 +384,70 @@ const userPackages = ref<any[]>([])
 const isAuthenticated = computed(() => currentPickupUser.value !== null)
 const userAuthLevel = computed(() => currentPickupUser.value?.auth_level || null)
 const currentUser = computed(() => currentPickupUser.value)
+const hasMultipleAuthUsers = computed(() => authenticatedPickupUsers.value.length > 1)
 
 // 检查取件认证状态
 const checkPickupAuth = async () => {
-  // 这里可以实现检查多个用户的取件认证
-  // 暂时简化为检查当前选中用户
-  if (currentPickupUser.value) {
-    const hasAuth = await authService.hasPickupAuth(currentPickupUser.value.user_id)
-    if (!hasAuth) {
-      currentPickupUser.value = null
-      pickupAuthInfo.value = null
-    } else {
-      pickupAuthInfo.value = await authService.getPickupAuthInfo(currentPickupUser.value.user_id)
+  try {
+    loadingUsers.value = true
+    // 获取所有已认证的取件用户
+    authenticatedPickupUsers.value = await authService.getAuthenticatedPickupUsers()
+    
+    // 如果当前用户不在已认证列表中，清除当前用户
+    if (currentPickupUser.value) {
+      const stillValid = authenticatedPickupUsers.value.find(
+        user => user.user_id === currentPickupUser.value?.user_id
+      )
+      if (!stillValid) {
+        currentPickupUser.value = null
+        currentPickupUserId.value = ''
+        pickupAuthInfo.value = null
+      } else {
+        // 更新当前用户的认证信息
+        currentPickupUser.value = stillValid
+        pickupAuthInfo.value = stillValid.pickup_auth_info
+      }
     }
+    
+    // 如果没有当前用户，但有已认证用户，自动选择第一个
+    if (!currentPickupUser.value && authenticatedPickupUsers.value.length > 0) {
+      currentPickupUser.value = authenticatedPickupUsers.value[0]
+      currentPickupUserId.value = authenticatedPickupUsers.value[0].user_id
+      pickupAuthInfo.value = authenticatedPickupUsers.value[0].pickup_auth_info
+    }
+    
+    // 如果当前选中的用户ID不在列表中，清除选择
+    if (currentPickupUserId.value && !authenticatedPickupUsers.value.find(u => u.user_id === currentPickupUserId.value)) {
+      currentPickupUserId.value = ''
+    }
+    
+  } catch (error) {
+    console.error('检查取件认证状态失败:', error)
+  } finally {
+    loadingUsers.value = false
   }
 }
 
 // 初始化和数据加载
 onMounted(async () => {
-  // 检查是否有取件认证
+  // 检查取件认证状态和已认证用户
   await checkPickupAuth()
   
+  // 如果有当前用户，刷新包裹列表
   if (currentPickupUser.value) {
     await refreshPackages()
+  }
+})
+
+// 定期检查认证状态
+authCheckInterval.value = setInterval(async () => {
+  await checkPickupAuth()
+}, 30000) // 每30秒检查一次
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (authCheckInterval.value) {
+    clearInterval(authCheckInterval.value)
   }
 })
 
@@ -384,17 +481,70 @@ const selectPackage = (pkg: any) => {
 const handleAuthSuccess = async (user: User, authResult: any) => {
   console.log('取件认证成功:', user, authResult)
   
-  // 设置当前取件用户
-  currentPickupUser.value = user
-  pickupAuthInfo.value = authResult
-  authTime.value = new Date().toLocaleString('zh-CN')
+  // 刷新已认证用户列表
+  await checkPickupAuth()
   
-  showAuthModal.value = false
+  // 找到新认证的用户并设置为当前用户
+  const authenticatedUser = authenticatedPickupUsers.value.find(u => u.user_id === user.user_id)
+  if (authenticatedUser) {
+    currentPickupUser.value = authenticatedUser
+    currentPickupUserId.value = authenticatedUser.user_id
+    pickupAuthInfo.value = authenticatedUser.pickup_auth_info
+    authTime.value = new Date().toLocaleString('zh-CN')
+  }
+  
+  // 不自动关闭认证对话框
+  // showAuthModal.value = false
   
   // 刷新包裹列表
   await refreshPackages()
   
   ElMessage.success(`取件认证成功，${user.name} 可以进行取件操作`)
+}
+
+// 处理用户下拉选择变化
+const handleUserChange = async (userId: string) => {
+  const selectedUser = authenticatedPickupUsers.value.find(u => u.user_id === userId)
+  if (selectedUser) {
+    await switchPickupUser(selectedUser)
+  }
+}
+
+// 切换当前取件用户
+const switchPickupUser = async (user: User) => {
+  if (user.user_id === currentPickupUser.value?.user_id) {
+    return // 如果是同一个用户，不需要切换
+  }
+  
+  currentPickupUser.value = user
+  currentPickupUserId.value = user.user_id
+  pickupAuthInfo.value = user.pickup_auth_info
+  authTime.value = new Date().toLocaleString('zh-CN')
+  
+  // 刷新包裹列表
+  await refreshPackages()
+  
+  ElMessage.success(`已切换到用户 ${user.name}`)
+}
+
+// 获取用户认证剩余时间
+const getAuthTimeRemaining = (expiresAt: string) => {
+  const expires = new Date(expiresAt)
+  const now = new Date()
+  const diff = expires.getTime() - now.getTime()
+  
+  if (diff <= 0) {
+    return '已过期'
+  }
+  
+  const minutes = Math.floor(diff / (1000 * 60))
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+  
+  if (minutes > 0) {
+    return `${minutes}分${seconds}秒`
+  } else {
+    return `${seconds}秒`
+  }
 }
 
 const refreshPackages = async () => {
@@ -848,6 +998,98 @@ const handleSuccessClose = () => {
 .package-details-content {
   max-height: 50vh;
   overflow-y: auto;
+}
+
+/* 用户信息和认证管理样式 */
+.user-info-card {
+  margin-bottom: 3vh;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.no-auth-users {
+  padding: 2vh 0;
+  text-align: center;
+}
+
+.user-selection {
+  margin-bottom: 2vh;
+}
+
+.user-select {
+  width: 100%;
+}
+
+.user-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 0.9vw;
+  color: #303133;
+}
+
+.user-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.8vw;
+}
+
+.remaining-time {
+  font-size: 0.7vw;
+  color: #f56c6c;
+  font-weight: 500;
+}
+
+.remaining-time-display {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+.current-user-info {
+  margin-top: 1vh;
+}
+
+.current-auth-info-card {
+  margin-bottom: 2vh;
+  border-radius: 12px;
+  border: 2px solid #67c23a;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e1f3d8 100%);
+}
+
+.current-auth-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1vh 0;
+}
+
+.current-auth-info .auth-user {
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+}
+
+.current-auth-info .user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+}
+
+.current-auth-info .auth-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3vh;
+  font-size: 0.8vw;
+  color: #606266;
+}
+
+.expires-info {
+  color: #909399;
 }
 
 /* 动画效果 */

@@ -14,6 +14,12 @@ export interface User {
   department?: string
   l2_auth?: string
   l3_auth?: string
+  pickup_auth_info?: {
+    verified_level: string
+    started_at: string
+    expires_at: string
+    methods: string[]
+  }
 }
 
 // 认证请求接口
@@ -142,6 +148,44 @@ export class AuthService {
         const user = await this.getUserById(userId)
         if (user) {
           authenticatedUsers.push(user)
+        }
+      }
+    }
+
+    return authenticatedUsers
+  }
+
+  // 获取已认证的取件用户列表
+  async getAuthenticatedPickupUsers(): Promise<User[]> {
+    await this.refreshAuthCacheDetails()
+    
+    if (!this.authCacheDetails) {
+      return []
+    }
+
+    const authenticatedUsers: User[] = []
+    const pickupCache = this.authCacheDetails.pickup_auth_cache
+
+    for (const userId in pickupCache) {
+      const userCache = pickupCache[userId]
+      
+      // 检查是否过期
+      const expiresAt = new Date(userCache.expires_at)
+      const now = new Date()
+      
+      if (now < expiresAt) {
+        const user = await this.getUserById(userId)
+        if (user) {
+          // 添加认证信息到用户对象
+          authenticatedUsers.push({
+            ...user,
+            pickup_auth_info: {
+              verified_level: userCache.verified_level,
+              started_at: userCache.started_at,
+              expires_at: userCache.expires_at,
+              methods: userCache.methods
+            }
+          })
         }
       }
     }
