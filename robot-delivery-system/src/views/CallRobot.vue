@@ -19,6 +19,34 @@
             </template>
 
             <el-form :model="callForm" :rules="callRules" ref="callFormRef" label-width="7vw">
+              <!-- 当前用户信息 -->
+              <el-form-item label="呼叫用户">
+                <div class="current-user-info">
+                  <div v-if="userStore.isAuthenticated" class="user-display">
+                    <el-avatar :size="24">
+                      {{ userStore.currentUser?.name?.charAt(0) }}
+                    </el-avatar>
+                    <div class="user-details">
+                      <span class="user-name">{{ userStore.currentUser?.name }}</span>
+                      <el-tag :type="userStore.getAuthLevelType(userStore.currentUser?.auth_level || '')" size="small">
+                        {{ userStore.currentUser?.auth_level }}
+                      </el-tag>
+                    </div>
+                  </div>
+                  <div v-else class="no-user">
+                    <el-alert
+                      title="未认证用户"
+                      description="请返回主页进行身份认证"
+                      type="warning"
+                      :closable="false"
+                    />
+                    <el-button @click="$router.push('/')" type="primary" size="small">
+                      返回主页认证
+                    </el-button>
+                  </div>
+                </div>
+              </el-form-item>
+
               <!-- 选择机器人 -->
               <el-form-item label="选择机器人" prop="robotId">
                 <el-select
@@ -207,13 +235,14 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
-import { authService } from '@/services/authService'
+import { useUserStore } from '@/stores/user'
 import { locationApiService } from '@/services/locationApiService'
 import { taskApiService } from '@/services/taskApiService'
 import { Phone, Bell, User, Grid } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const robotStore = useRobotStore()
+const userStore = useUserStore()
 
 // 表单数据
 const callForm = reactive({
@@ -307,14 +336,16 @@ const submitCall = async () => {
     isSubmitting.value = true
 
     // 检查用户认证状态
-    if (!authService.isAuthenticated()) {
+    if (!userStore.isAuthenticated) {
       ElMessage.error('请先进行身份认证')
+      router.push('/')
       return
     }
 
-    const user = authService.getCurrentUser()
+    const user = userStore.currentUser
     if (!user) {
       ElMessage.error('用户信息异常')
+      router.push('/')
       return
     }
 
@@ -802,5 +833,37 @@ const callAnother = () => {
 .robot-status-list::-webkit-scrollbar-thumb:hover,
 .compartment-grid::-webkit-scrollbar-thumb:hover {
   background: rgba(102, 126, 234, 0.7);
+}
+
+.current-user-info {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 1vh;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.user-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.no-user {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 </style>

@@ -8,14 +8,14 @@
       <div class="header-center">
         <!-- 用户认证状态显示 -->
         <div class="auth-status">
-          <div v-if="isAuthenticated" class="user-info">
+          <div v-if="userStore.isAuthenticated" class="user-info">
             <el-avatar :size="32">
-              {{ currentUser?.name?.charAt(0) }}
+              {{ userStore.currentUser?.name?.charAt(0) }}
             </el-avatar>
             <div class="user-details">
-              <div class="user-name">{{ currentUser?.name }}</div>
-              <el-tag :type="getAuthLevelType(currentUser?.auth_level || '')" size="small">
-                {{ currentUser?.auth_level }} 权限
+              <div class="user-name">{{ userStore.currentUser?.name }}</div>
+              <el-tag :type="userStore.getAuthLevelType(userStore.currentUser?.auth_level || '')" size="small">
+                {{ userStore.currentUser?.auth_level }} 权限
               </el-tag>
             </div>
             <el-dropdown @command="switchUser" trigger="click">
@@ -26,14 +26,14 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item 
-                    v-for="user in authenticatedUsers" 
+                    v-for="user in userStore.authenticatedUsers" 
                     :key="user.user_id"
                     :command="user.user_id"
-                    :disabled="user.user_id === selectedUserId"
+                    :disabled="user.user_id === userStore.selectedUserId"
                   >
                     <div class="user-option">
                       <span>{{ user.name }} ({{ user.user_id }})</span>
-                      <el-tag :type="getAuthLevelType(user.auth_level)" size="small">
+                      <el-tag :type="userStore.getAuthLevelType(user.auth_level)" size="small">
                         {{ user.auth_level }}
                       </el-tag>
                     </div>
@@ -113,9 +113,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRobotStore } from '@/stores/robot'
-import { authService, type User } from '@/services/authService'
+import { useUserStore } from '@/stores/user'
 import {
   Phone,
   Box,
@@ -137,57 +137,10 @@ import LockerStatusPanel from '@/components/LockerStatusPanel.vue'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 
 const robotStore = useRobotStore()
+const userStore = useUserStore()
 
 // 认证相关状态
 const showUserSwitchModal = ref(false)
-const authenticatedUsers = ref<User[]>([])
-const selectedUserId = ref<string>('')
-const loading = ref(false)
-
-// 认证相关计算属性
-const isAuthenticated = computed(() => selectedUserId.value !== '')
-const currentUser = computed(() => {
-  return authenticatedUsers.value.find(user => user.user_id === selectedUserId.value) || null
-})
-
-// 方法
-const getAuthLevelType = (level: string) => {
-  const types = {
-    'L1': 'success',
-    'L2': 'warning', 
-    'L3': 'danger'
-  }
-  return types[level as keyof typeof types] || 'info'
-}
-
-// 刷新已认证用户列表
-const refreshAuthenticatedUsers = async () => {
-  loading.value = true
-  try {
-    console.log('开始刷新认证用户列表...')
-    const users = await authService.getAuthenticatedSendUsers()
-    console.log('获取到的认证用户:', users)
-    authenticatedUsers.value = users
-    
-    // 如果当前选中的用户仍在已认证用户列表中，保持选择
-    if (selectedUserId.value && users.some(user => user.user_id === selectedUserId.value)) {
-      console.log('当前选中用户仍在认证列表中，保持选择')
-      // 保持原有选择
-    } else if (users.length > 0) {
-      // 如果当前没有选中用户，或选中的用户不在列表中，选择第一个
-      selectedUserId.value = users[0].user_id
-      console.log('自动选择第一个认证用户:', users[0].name)
-    } else {
-      // 没有任何认证用户
-      selectedUserId.value = ''
-      console.log('没有认证用户')
-    }
-  } catch (error) {
-    console.error('刷新认证用户列表失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
 
 // 切换用户
 const switchUser = (userId: string) => {
@@ -197,20 +150,15 @@ const switchUser = (userId: string) => {
     return
   }
   
-  selectedUserId.value = userId
-  // 切换现有用户时不需要关闭模态框，因为没有打开
+  userStore.switchUser(userId)
 }
 
 const handleAuthSuccess = async (user: any, authResult: any) => {
   console.log('用户认证成功:', user, authResult)
   
-  // 先刷新已认证用户列表
-  await refreshAuthenticatedUsers()
-  
   // 认证成功后自动切换到新用户
   if (user && authResult.success) {
-    selectedUserId.value = user.user_id
-    console.log('自动切换到新认证用户:', user.name)
+    await userStore.handleAuthSuccess(user)
   }
   
   // 不自动关闭认证模态框，让用户手动关闭
@@ -218,15 +166,8 @@ const handleAuthSuccess = async (user: any, authResult: any) => {
 }
 
 onMounted(async () => {
-  // 初始化时刷新已认证用户列表
-  await refreshAuthenticatedUsers()
-  
-  // 如果有已认证用户且当前没有选中用户，自动选择第一个
-  if (authenticatedUsers.value.length > 0 && !selectedUserId.value) {
-    selectedUserId.value = authenticatedUsers.value[0].user_id
-    console.log('自动选择第一个已认证用户:', authenticatedUsers.value[0].name)
-  }
-  
+  // 初始化用户状态
+  await userStore.initialize()
   console.log('主界面初始化完成')
 })
 </script>

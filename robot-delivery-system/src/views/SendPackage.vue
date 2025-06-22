@@ -20,35 +20,50 @@
 
             <el-form :model="sendForm" :rules="sendRules" ref="sendFormRef" label-width="7vw">
               <!-- 身份认证 -->
-              <el-form-item label="身份认证" prop="authenticated">
+              <el-form-item label="寄送用户" prop="authenticated">
                 <div class="auth-section">
-                  <div v-if="!isAuthenticated" class="auth-required">
+                  <div v-if="!userStore.isAuthenticated" class="auth-required">
                     <el-alert
                       title="需要身份认证"
-                      :description="`寄送${sendForm.securityLevel}级别包裹需要进行身份认证`"
+                      description="请返回主页进行身份认证后再寄送包裹"
                       type="warning"
                       :closable="false"
                     />
-                    <el-button type="primary" @click="showAuthModal = true" style="margin-top: 1vh">
+                    <el-button @click="$router.push('/')" type="primary" style="margin-top: 1vh">
                       <el-icon><Lock /></el-icon>
-                      进行身份认证
+                      返回主页认证
                     </el-button>
                   </div>
                   <div v-else class="auth-success">
-                    <el-alert
-                      title="认证成功"
-                      :description="`已通过${userAuthLevel}级别身份认证`"
-                      type="success"
-                      :closable="false"
-                    />
-                    <el-button
-                      type="info"
-                      @click="showAuthModal = true"
-                      size="small"
-                      style="margin-top: 1vh"
-                    >
-                      重新认证
-                    </el-button>
+                    <div class="current-user-display">
+                      <el-avatar :size="32">
+                        {{ userStore.currentUser?.name?.charAt(0) }}
+                      </el-avatar>
+                      <div class="user-info">
+                        <div class="user-name">{{ userStore.currentUser?.name }}</div>
+                        <el-tag :type="userStore.getAuthLevelType(userStore.currentUser?.auth_level || '')" size="small">
+                          {{ userStore.currentUser?.auth_level }} 权限
+                        </el-tag>
+                      </div>
+                    </div>
+                    <div class="auth-level-check">
+                      <div v-if="canSendCurrentLevel" class="level-ok">
+                        <el-icon color="#67c23a"><CircleCheck /></el-icon>
+                        <span>权限满足，可寄送{{ sendForm.securityLevel }}级别包裹</span>
+                      </div>
+                      <div v-else class="level-insufficient">
+                        <el-icon color="#f56c6c"><Close /></el-icon>
+                        <span>权限不足，{{ sendForm.securityLevel }}级别包裹需要{{ sendForm.securityLevel }}或以上权限</span>
+                        <el-button
+                          type="warning"
+                          @click="showAuthModal = true"
+                          size="small"
+                          style="margin-left: 1rem"
+                        >
+                          提升权限
+                        </el-button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </el-form-item>
@@ -321,17 +336,18 @@ import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRobotStore } from '@/stores/robot'
-import { authService } from '@/services/authService'
+import { useUserStore } from '@/stores/user'
 import { locationApiService } from '@/services/locationApiService'
 import { taskApiService } from '@/services/taskApiService'
 import { systemStatusService } from '@/services/systemStatusService'
 import { userApiService } from '@/services/userApiService'
 import UserAuthModal from '@/components/UserAuthModal.vue'
 import VoiceRecorder from '@/components/VoiceRecorder.vue'
-import { Box, Lock, Upload, Grid, InfoFilled, Microphone } from '@element-plus/icons-vue'
+import { Box, Lock, Upload, Grid, InfoFilled, Microphone, CircleCheck, Close } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const robotStore = useRobotStore()
+const userStore = useUserStore()
 
 // 表单数据
 const sendForm = reactive({
@@ -419,16 +435,32 @@ const sendTime = ref('')
 const estimatedDelivery = ref('')
 
 // 计算属性
-const isAuthenticated = computed(() => authService.isAuthenticated())
-const userAuthLevel = computed(() => authService.getCurrentUser()?.auth_level || null)
-const currentUser = computed(() => authService.getCurrentUser())
+const isAuthenticated = computed(() => userStore.isAuthenticated)
+const userAuthLevel = computed(() => userStore.currentUser?.auth_level || null)
+const currentUser = computed(() => userStore.currentUser)
 
 const availableCompartments = computed(() => robotStore.compartments.filter((c) => !c.isOccupied))
 
 const occupiedCompartments = computed(() => robotStore.compartments.filter((c) => c.isOccupied))
 
+// 检查当前用户权限是否足够寄送当前安全等级的包裹
+const canSendCurrentLevel = computed(() => {
+  if (!userStore.isAuthenticated || !userStore.currentUser) {
+    return false
+  }
+  
+  const userLevel = userStore.currentUser.auth_level
+  const requiredLevel = sendForm.securityLevel
+  
+  const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
+  const userLevelNum = levelOrder[userLevel as keyof typeof levelOrder] || 0
+  const requiredLevelNum = levelOrder[requiredLevel as keyof typeof levelOrder] || 0
+  
+  return userLevelNum >= requiredLevelNum
+})
+
 const canSubmit = computed(() => {
-  const hasAuth = isAuthenticated.value
+  const hasAuth = isAuthenticated.value && canSendCurrentLevel.value
   const hasRequiredInfo =
     sendForm.securityLevel !== 'L3' ||
     (sendForm.recipientInfo.name && sendForm.recipientInfo.phone && sendForm.recipientInfo.idNumber)
@@ -474,6 +506,8 @@ const onSecurityLevelChange = () => {
 const handleAuthSuccess = (user: any, authResult: any) => {
   ElMessage.success(`身份认证成功，获得${user.auth_level}级别权限`)
   console.log('认证成功:', user, authResult)
+  // 刷新用户状态
+  userStore.handleAuthSuccess(user)
 }
 
 // 语音选择地点处理
@@ -498,30 +532,23 @@ const submitSend = async () => {
     isSubmitting.value = true
 
     // 检查认证状态
-    if (!isAuthenticated.value) {
+    if (!userStore.isAuthenticated) {
       ElMessage.error('请先进行身份认证')
+      router.push('/')
       return
     }
 
     // 检查认证等级
-    const currentAuthLevel = userAuthLevel.value
-    if (!currentAuthLevel) {
-      ElMessage.error('无法获取认证等级')
-      return
-    }
-
-    const authLevelNum = parseInt(currentAuthLevel.replace('L', ''))
-    const requiredLevelNum = parseInt(sendForm.securityLevel.replace('L', ''))
-
-    if (authLevelNum < requiredLevelNum) {
+    if (!canSendCurrentLevel.value) {
       ElMessage.error(`权限不足，需要${sendForm.securityLevel}级别认证`)
       return
     }
 
     // 获取当前用户信息
-    const user = currentUser.value
+    const user = userStore.currentUser
     if (!user) {
       ElMessage.error('用户信息异常')
+      router.push('/')
       return
     }
 
@@ -1094,5 +1121,47 @@ const sendAnother = () => {
 
 :deep(.el-descriptions__label) {
   font-weight: 600;
+}
+
+.current-user-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.auth-level-check {
+  margin-top: 1rem;
+}
+
+.level-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.level-insufficient {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #f56c6c;
+  font-weight: 500;
 }
 </style>
