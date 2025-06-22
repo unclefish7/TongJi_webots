@@ -95,17 +95,37 @@
                 <el-radio-group v-model="callForm.priority" class="priority-radio-group">
                   <el-radio value="normal" class="priority-radio">
                     <div class="priority-option">
-                      <div class="priority-title">普通呼叫</div>
+                      <div class="priority-title">普通呼叫 (L1权限)</div>
                       <div class="priority-desc">标准响应时间，适用于一般需求</div>
                     </div>
                   </el-radio>
                   <el-radio value="urgent" class="priority-radio">
                     <div class="priority-option">
-                      <div class="priority-title">紧急呼叫</div>
+                      <div class="priority-title">紧急呼叫 (L3权限)</div>
                       <div class="priority-desc">优先响应，适用于紧急情况</div>
                     </div>
                   </el-radio>
                 </el-radio-group>
+                
+                <!-- 权限检查提示 -->
+                <div v-if="userStore.isAuthenticated" class="auth-level-check">
+                  <div v-if="canCallCurrentLevel" class="level-ok">
+                    <el-icon color="#67c23a"><CircleCheck /></el-icon>
+                    <span>权限满足，可以进行{{ callForm.priority === 'urgent' ? '紧急' : '普通' }}呼叫</span>
+                  </div>
+                  <div v-else class="level-insufficient">
+                    <el-icon color="#f56c6c"><Close /></el-icon>
+                    <span>权限不足，{{ callForm.priority === 'urgent' ? '紧急' : '普通' }}呼叫需要{{ requiredAuthLevel }}或以上权限</span>
+                    <el-button
+                      type="warning"
+                      @click="showAuthModal = true"
+                      size="small"
+                      style="margin-left: 1rem"
+                    >
+                      提升权限
+                    </el-button>
+                  </div>
+                </div>
               </el-form-item>
 
               <!-- 备注信息 -->
@@ -227,6 +247,14 @@
         </template>
       </el-result>
     </el-dialog>
+
+    <!-- 身份认证弹窗 -->
+    <UserAuthModal
+      v-model="showAuthModal"
+      purpose="send"
+      :required-level="requiredAuthLevel"
+      @auth-success="handleAuthSuccess"
+    />
   </div>
 </template>
 
@@ -238,7 +266,8 @@ import { useRobotStore } from '@/stores/robot'
 import { useUserStore } from '@/stores/user'
 import { locationApiService } from '@/services/locationApiService'
 import { taskApiService } from '@/services/taskApiService'
-import { Phone, Bell, User, Grid } from '@element-plus/icons-vue'
+import UserAuthModal from '@/components/UserAuthModal.vue'
+import { Phone, Bell, User, Grid, CircleCheck, Close } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const robotStore = useRobotStore()
@@ -281,8 +310,29 @@ onMounted(async () => {
 const callFormRef = ref()
 const isSubmitting = ref(false)
 const showSuccessDialog = ref(false)
+const showAuthModal = ref(false)
 const selectedRobotName = ref('')
 const estimatedArrival = ref('')
+
+// 计算属性
+const requiredAuthLevel = computed(() => {
+  return callForm.priority === 'urgent' ? 'L3' : 'L1'
+})
+
+const canCallCurrentLevel = computed(() => {
+  if (!userStore.isAuthenticated || !userStore.currentUser) {
+    return false
+  }
+  
+  const userLevel = userStore.currentUser.auth_level
+  const requiredLevel = requiredAuthLevel.value
+  
+  const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
+  const userLevelNum = levelOrder[userLevel as keyof typeof levelOrder] || 0
+  const requiredLevelNum = levelOrder[requiredLevel as keyof typeof levelOrder] || 0
+  
+  return userLevelNum >= requiredLevelNum
+})
 
 // 计算属性
 const locationText = computed(() => {
@@ -349,6 +399,13 @@ const submitCall = async () => {
       return
     }
 
+    // 检查权限等级
+    if (!canCallCurrentLevel.value) {
+      ElMessage.error(`${callForm.priority === 'urgent' ? '紧急' : '普通'}呼叫需要${requiredAuthLevel.value}级别权限`)
+      showAuthModal.value = true
+      return
+    }
+
     // 获取选中的机器人信息
     const selectedRobot = robotStore.robots.find((r) => r.id === callForm.robotId)
     if (!selectedRobot) {
@@ -364,7 +421,7 @@ const submitCall = async () => {
         user_id: user.user_id,
         receiver: user.user_id, // 呼叫任务的接收人就是发起人
         location_id: callForm.location,
-        security_level: 'L1' as 'L1' | 'L2' | 'L3', // 呼叫任务默认L1级别
+        security_level: requiredAuthLevel.value as 'L1' | 'L2' | 'L3', // 根据呼叫类型确定安全等级
         task_type: 'call' as 'call' | 'send', // 呼叫任务类型
         description: `${callForm.priority === 'urgent' ? '紧急' : '普通'}呼叫机器人到${callForm.location}${callForm.notes ? ` - ${callForm.notes}` : ''}`
       }
@@ -413,6 +470,14 @@ const handleSuccessClose = () => {
 const callAnother = () => {
   showSuccessDialog.value = false
   resetForm()
+}
+
+const handleAuthSuccess = async (user: any, authResult: any) => {
+  ElMessage.success(`权限提升成功，获得${user.auth_level}级别权限`)
+  console.log('认证成功:', user, authResult)
+  // 刷新用户状态
+  await userStore.handleAuthSuccess(user)
+  showAuthModal.value = false
 }
 </script>
 
@@ -865,5 +930,25 @@ const callAnother = () => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.auth-level-check {
+  margin-top: 1rem;
+}
+
+.level-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.level-insufficient {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #f56c6c;
+  font-weight: 500;
 }
 </style>
