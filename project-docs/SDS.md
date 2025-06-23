@@ -1,9 +1,9 @@
 # 软件设计说明书（SDS）
-## 智能机器人配送系统
+## 安全配送机器人系统
 
 **版本**: 1.0  
 **日期**: 2025年6月22日  
-**项目**: 基于Webots的智能室内配送机器人系统
+**项目**: 安全配送机器人系统
 
 ---
 
@@ -11,12 +11,13 @@
 
 ### 1.1 编写目的
 
-本文档详细描述了智能机器人配送系统的软件设计方案，包括系统架构、模块设计、数据结构、接口设计等技术细节。本文档的主要目的是：
+本文档详细描述了安全配送机器人系统的软件设计方案，包括系统架构、模块设计、安全机制、数据结构、接口设计等技术细节。本文档的主要目的是：
 
-- 为开发团队提供详细的技术实现指导
+- 为开发团队提供详细的技术实现指导，特别是安全认证模块的设计
 - 为系统集成和测试提供设计依据
 - 为后续系统维护和扩展提供技术参考
 - 确保系统设计的一致性和可追溯性
+- 详细说明L1/L2/L3三级安全认证体系的实现方案
 
 ### 1.2 阅读对象
 
@@ -543,7 +544,7 @@ class ROS2Bridge(Node):
             self.get_logger().error(f'处理机器人状态消息失败: {e}')
 ```
 
-### 3.3 ROS2节点模块设计
+#### 3.3 ROS2节点模块设计
 
 #### 3.3.1 语义导航节点
 
@@ -1244,6 +1245,166 @@ class TransactionManager:
                 await rollback_op()
             except Exception as e:
                 self.get_logger().error(f"回滚操作失败: {e}")
+```
+
+---
+
+## 2.2 安全机制设计
+
+#### 2.2.1 多级安全认证架构
+
+本系统实现了L1/L2/L3三级安全认证机制，确保不同安全等级的操作得到相应的权限控制：
+
+```python
+# 安全认证服务设计
+class SecurityAuthService:
+    """多级安全认证服务"""
+    
+    def __init__(self):
+        self.auth_levels = {
+            'L1': {
+                'required_fields': ['user_id'],
+                'description': '基础安全级别，仅需用户ID验证',
+                'timeout': 1800  # 30分钟
+            },
+            'L2': {
+                'required_fields': ['user_id', 'l2_auth'],
+                'description': '中等安全级别，需要用户ID和PIN码验证',
+                'timeout': 1800
+            },
+            'L3': {
+                'required_fields': ['user_id', 'l2_auth', 'l3_auth'],
+                'description': '高等安全级别，需要用户ID、PIN码和生物特征验证',
+                'timeout': 1800
+            }
+        }
+    
+    def verify_auth(self, user_id: str, requested_level: str, provided: dict) -> tuple:
+        """
+        验证用户认证
+        
+        Args:
+            user_id: 用户ID
+            requested_level: 请求的认证等级 (L1/L2/L3)
+            provided: 提供的认证信息
+            
+        Returns:
+            (success, verified_level, methods)
+        """
+        # 实现认证逻辑
+        pass
+    
+    def verify_purpose_auth(self, user_id: str, purpose: str, requested_level: str, provided: dict) -> dict:
+        """
+        基于用途的认证验证
+        
+        Args:
+            user_id: 用户ID
+            purpose: 认证用途 (send/pickup)
+            requested_level: 请求的认证等级
+            provided: 提供的认证信息
+            
+        Returns:
+            认证结果字典
+        """
+        # 实现用途导向认证逻辑
+        pass
+```
+
+#### 2.2.2 安全等级权限控制
+
+```python
+# 权限控制矩阵
+PERMISSION_MATRIX = {
+    'L1': {
+        'create_task': ['L1'],  # 只能创建L1等级任务
+        'pickup_task': ['L1'],  # 只能接收L1等级包裹
+        'view_queue': True,     # 可以查看任务队列
+        'call_robot': True      # 可以呼叫机器人
+    },
+    'L2': {
+        'create_task': ['L1', 'L2'],  # 可以创建L1、L2等级任务
+        'pickup_task': ['L1', 'L2'],  # 可以接收L1、L2等级包裹
+        'view_queue': True,
+        'call_robot': True
+    },
+    'L3': {
+        'create_task': ['L1', 'L2', 'L3'],  # 可以创建所有等级任务
+        'pickup_task': ['L1', 'L2', 'L3'],  # 可以接收所有等级包裹
+        'view_queue': True,
+        'call_robot': True,
+        'admin_operations': True  # 管理员操作权限
+    }
+}
+```
+
+#### 2.2.3 数据安全保护
+
+```python
+# 数据安全服务
+class DataSecurityService:
+    """数据安全保护服务"""
+    
+    def __init__(self):
+        self.encryption_key = self._generate_key()
+        self.audit_logger = AuditLogger()
+    
+    def encrypt_sensitive_data(self, data: dict) -> dict:
+        """加密敏感数据"""
+        sensitive_fields = ['l2_auth', 'l3_auth', 'biometric_data']
+        # 实现数据加密逻辑
+        return encrypted_data
+    
+    def log_security_event(self, event_type: str, user_id: str, details: dict):
+        """记录安全事件"""
+        self.audit_logger.log({
+            'timestamp': datetime.now().isoformat(),
+            'event_type': event_type,
+            'user_id': user_id,
+            'details': details,
+            'ip_address': self._get_client_ip(),
+            'user_agent': self._get_user_agent()
+        })
+```
+
+#### 2.2.4 认证缓存机制
+
+为了提升用户体验，系统实现了安全的认证缓存机制：
+
+```python
+class AuthCacheManager:
+    """认证缓存管理器"""
+    
+    def __init__(self):
+        self.cache = {}
+        self.cleanup_interval = 300  # 5分钟清理一次过期缓存
+    
+    def cache_auth_result(self, user_id: str, level: str, purpose: str = None):
+        """缓存认证结果"""
+        cache_key = self._generate_cache_key(user_id, level, purpose)
+        expires_at = datetime.now() + timedelta(seconds=1800)  # 30分钟过期
+        
+        self.cache[cache_key] = {
+            'user_id': user_id,
+            'level': level,
+            'purpose': purpose,
+            'expires_at': expires_at,
+            'created_at': datetime.now()
+        }
+    
+    def get_cached_auth(self, user_id: str, level: str, purpose: str = None) -> dict:
+        """获取缓存的认证结果"""
+        cache_key = self._generate_cache_key(user_id, level, purpose)
+        
+        if cache_key in self.cache:
+            cached_auth = self.cache[cache_key]
+            if datetime.now() < cached_auth['expires_at']:
+                return cached_auth
+            else:
+                # 清理过期缓存
+                del self.cache[cache_key]
+        
+        return None
 ```
 
 ---
