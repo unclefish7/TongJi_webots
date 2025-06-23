@@ -358,10 +358,13 @@ const callAnother = () => {
 }
 
 const handleAuthSuccess = async (user: any, authResult: any) => {
-  ElMessage.success(`权限提升成功，获得${user.auth_level}级别权限`)
+  ElMessage.success(`权限提升成功，获得${authResult.verified_level}级别权限`)
   console.log('认证成功:', user, authResult)
-  // 刷新用户状态
-  await userStore.handleAuthSuccess(user)
+  // 刷新用户状态，传入实际认证等级
+  await userStore.handleAuthSuccess({
+    ...user,
+    verified_level: authResult.verified_level
+  })
   showAuthModal.value = false
 }
 </script>
