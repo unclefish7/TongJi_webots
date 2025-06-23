@@ -75,9 +75,12 @@ import { throttle } from 'lodash-es'
 
 // --- 机器人位置微调偏移量（以米为单位，确保缩放一致性） ---
 const ROBOT_POSITION_OFFSET = {
-    x: -5,  // X轴偏移：负数向左，正数向右（米）
-    y: 2     // Y轴偏移：正数向北，负数向南（米）
+    x: 0,  // X轴偏移：负数向左，正数向右（米）
+    y: 0     // Y轴偏移：正数向北，负数向南（米）
 }
+
+// --- 地图 X 方向拉伸倍数 ---
+const MAP_X_STRETCH = 1.1
 
 // --- 响应式状态 ---
 const isConnected = ref(false)
@@ -190,10 +193,10 @@ const createMapBitmap = async (map: MapData) => {
 
     // Y-flip the image data to match canvas coordinates (Y-down)
     const finalCanvas = document.createElement('canvas')
-    finalCanvas.width = width
+    finalCanvas.width = width * MAP_X_STRETCH
     finalCanvas.height = height
     const finalCtx = finalCanvas.getContext('2d')!
-    finalCtx.scale(1, -1)
+    finalCtx.scale(MAP_X_STRETCH, -1)
     finalCtx.translate(0, -height)
     finalCtx.drawImage(canvas, 0, 0)
 
@@ -251,7 +254,7 @@ const drawRobotLayer = () => {
     const adjustedY = y + ROBOT_POSITION_OFFSET.y
 
     // 将调整后的ROS世界坐标 (米) 转换为地图像素坐标
-    const robotMapX = (adjustedX - origin.position.x) / resolution
+    const robotMapX = ((adjustedX - origin.position.x) / resolution) * MAP_X_STRETCH
     const robotMapY = height - ((adjustedY - origin.position.y) / resolution) // Y轴翻转
 
     // 调试信息：确保坐标计算正确
@@ -388,7 +391,7 @@ const centerOnRobot = (redraw = true) => {
     const adjustedY = robotPosition.value.y + ROBOT_POSITION_OFFSET.y
 
     // 使用与drawRobotLayer完全相同的坐标转换
-    const robotMapX = (adjustedX - origin.position.x) / resolution
+    const robotMapX = ((adjustedX - origin.position.x) / resolution) * MAP_X_STRETCH
     const robotMapY = height - ((adjustedY - origin.position.y) / resolution) // Y轴翻转
 
     const mapCenterPx = { x: width / 2, y: height / 2 }
