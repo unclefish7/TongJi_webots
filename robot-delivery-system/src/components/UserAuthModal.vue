@@ -36,7 +36,7 @@
                 <div class="user-details">
                   <div class="user-name">{{ user.name }}</div>
                   <div class="user-id">ID: {{ user.user_id }}</div>
-                  <div class="user-level">权限: {{ user.auth_level }}</div>
+                  <div class="user-level">最高权限等级: {{ user.auth_level }}</div>
                   <div class="user-location">办公地点: {{ user.office_location }}</div>
                 </div>
               </div>
@@ -61,7 +61,7 @@
             <el-descriptions :column="2" border>
               <el-descriptions-item label="用户姓名">{{ selectedUser?.name }}</el-descriptions-item>
               <el-descriptions-item label="员工卡号">{{ selectedUser?.user_id }}</el-descriptions-item>
-              <el-descriptions-item label="权限等级">{{ selectedUser?.auth_level }}</el-descriptions-item>
+              <el-descriptions-item label="权限等级">{{ originalUserMaxLevel || selectedUser?.auth_level }}</el-descriptions-item>
               <el-descriptions-item label="办公地点">{{ selectedUser?.office_location }}</el-descriptions-item>
             </el-descriptions>
           </div>
@@ -110,7 +110,7 @@
               show-icon
             >
               <template #default>
-                <div>当前用户最高权限等级：<strong>{{ selectedUser?.auth_level }}</strong></div>
+                <div>当前用户最高权限等级：<strong>{{ originalUserMaxLevel || selectedUser?.auth_level }}</strong></div>
                 <div v-if="authForm.requested_level === 'L1'">L1级认证只需要员工卡号即可</div>
                 <div v-if="authForm.requested_level === 'L2'">L2级认证需要员工卡号 + L2认证密码</div>
                 <div v-if="authForm.requested_level === 'L3'">L3级认证需要员工卡号 + L2认证密码 + L3认证密码</div>
@@ -224,6 +224,7 @@ const visible = computed({
 const currentStep = ref(0)
 const availableUsers = ref<User[]>([])
 const selectedUser = ref<User | null>(null)
+const originalUserMaxLevel = ref<string>('') // 保存用户的原始最高权限等级
 const loadingUsers = ref(false)
 const authenticating = ref(false)
 const authPurpose = computed(() => props.purpose)
@@ -241,9 +242,9 @@ const authResult = reactive<AuthResponse & { message?: string }>({
 
 // 计算属性
 const canUseLevel = (level: string) => {
-  if (!selectedUser.value) return false
+  if (!selectedUser.value || !originalUserMaxLevel.value) return false
   const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
-  const userLevel = levelOrder[selectedUser.value.auth_level as keyof typeof levelOrder] || 0
+  const userLevel = levelOrder[originalUserMaxLevel.value as keyof typeof levelOrder] || 0
   const requiredLevel = levelOrder[level as keyof typeof levelOrder] || 0
   return userLevel >= requiredLevel
 }
@@ -260,6 +261,7 @@ watch(visible, (newValue, oldValue) => {
 const resetToStart = () => {
   currentStep.value = 0
   selectedUser.value = null
+  originalUserMaxLevel.value = ''
   authForm.l2_auth = ''
   authForm.l3_auth = ''
   authForm.requested_level = props.requiredLevel
@@ -279,9 +281,18 @@ const loadUsers = async () => {
   }
 }
 
-const selectUser = (user: User) => {
+const selectUser = async (user: User) => {
   selectedUser.value = user
   authForm.requested_level = props.requiredLevel
+  
+  // 获取用户的原始最高权限信息
+  try {
+    const originalUser = await authService.getUserById(user.user_id)
+    originalUserMaxLevel.value = originalUser?.auth_level || user.auth_level
+  } catch (error) {
+    console.error('获取用户原始信息失败:', error)
+    originalUserMaxLevel.value = user.auth_level
+  }
 }
 
 const nextStep = () => {

@@ -156,9 +156,12 @@ const switchUser = (userId: string) => {
 const handleAuthSuccess = async (user: any, authResult: any) => {
   console.log('用户认证成功:', user, authResult)
   
-  // 认证成功后自动切换到新用户
+  // 认证成功后自动切换到新用户，传入实际认证等级
   if (user && authResult.success) {
-    await userStore.handleAuthSuccess(user)
+    await userStore.handleAuthSuccess({
+      ...user,
+      verified_level: authResult.verified_level
+    })
   }
   
   // 不自动关闭认证模态框，让用户手动关闭

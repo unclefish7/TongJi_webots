@@ -142,12 +142,24 @@ export class AuthService {
     for (const userId in sendCache) {
       const userCache = sendCache[userId]
       // 检查是否有可用的认证记录
-      const hasAvailableAuth = userCache.records.some(record => !record.used)
+      const availableRecords = userCache.records.filter(record => !record.used)
       
-      if (hasAvailableAuth) {
+      if (availableRecords.length > 0) {
         const user = await this.getUserById(userId)
         if (user) {
-          authenticatedUsers.push(user)
+          // 找到最高等级的可用认证记录
+          const highestRecord = availableRecords.reduce((highest, current) => {
+            const levelOrder = { 'L1': 1, 'L2': 2, 'L3': 3 }
+            const currentLevel = levelOrder[current.level as keyof typeof levelOrder] || 0
+            const highestLevel = levelOrder[highest.level as keyof typeof levelOrder] || 0
+            return currentLevel > highestLevel ? current : highest
+          })
+          
+          // 使用实际认证的等级，而不是用户的最高等级
+          authenticatedUsers.push({
+            ...user,
+            auth_level: highestRecord.level // 将 auth_level 设置为实际认证的等级
+          })
         }
       }
     }
